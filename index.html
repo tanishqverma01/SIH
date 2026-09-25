@@ -1,0 +1,2343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AeroTwin AI — Drone-to-3D Digital Twin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e13;
+    --bg-alt:#0d1218;
+    --surface:#121820;
+    --surface-2:#182029;
+    --surface-3:#1e2833;
+    --line:#26313d;
+    --line-soft:#1b232c;
+    --text:#dfe6ec;
+    --text-dim:#8a97a3;
+    --text-faint:#5c6976;
+    --accent:#5fc4ae;
+    --accent-dim:#3a7d70;
+    --accent-glow:rgba(95,196,174,0.35);
+    --amber:#d99a4e;
+    --amber-dim:#8a6836;
+    --red:#d9695a;
+    --blue:#5b8fc9;
+    --violet:#9b8fd6;
+    --radius:10px;
+    --radius-sm:6px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+    font-size:14px;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:8px;}
+  ::-webkit-scrollbar-thumb:hover{background:var(--line);}
+
+  a{color:inherit;text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+
+  /* ---------- App shell ---------- */
+  #app{display:flex;height:100vh;width:100vw;}
+
+  /* Sidebar */
+  #sidebar{
+    width:246px;flex:none;
+    background:linear-gradient(180deg,#0c1117,#0a0e13);
+    border-right:1px solid var(--line-soft);
+    display:flex;flex-direction:column;
+    padding:20px 14px;
+    overflow-y:auto;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:2px 6px 22px 6px;}
+  .brand-mark{
+    width:32px;height:32px;border-radius:8px;flex:none;
+    background:radial-gradient(circle at 30% 30%, var(--accent), var(--accent-dim));
+    position:relative;box-shadow:0 0 18px var(--accent-glow);
+  }
+  .brand-mark::after{
+    content:"";position:absolute;inset:7px;border-radius:4px;
+    border:1.5px solid rgba(10,14,19,0.55);
+  }
+  .brand-name{font-weight:600;font-size:14.5px;letter-spacing:0.5px;line-height:1.1;}
+  .brand-sub{font-size:10px;color:var(--text-faint);letter-spacing:1.2px;margin-top:2px;}
+
+  .nav-section{margin-top:14px;}
+  .nav-section:first-of-type{margin-top:6px;}
+  .nav-section-label{font-size:9.5px;letter-spacing:1.4px;color:var(--text-faint);font-weight:600;padding:0 11px 6px 11px;}
+  nav{display:flex;flex-direction:column;gap:2px;}
+  .nav-item{
+    display:flex;align-items:center;gap:11px;
+    padding:8.5px 11px;border-radius:var(--radius-sm);
+    color:var(--text-dim);font-size:13px;font-weight:500;
+    border:1px solid transparent;
+    transition:background .15s, color .15s, border-color .15s;
+    position:relative;
+  }
+  .nav-item svg{flex:none;width:15px;height:15px;opacity:.85;}
+  .nav-item:hover{background:var(--surface);color:var(--text);}
+  .nav-item.active{
+    background:linear-gradient(90deg, rgba(95,196,174,0.14), rgba(95,196,174,0.02));
+    color:var(--text);border-color:rgba(95,196,174,0.25);
+  }
+  .nav-item.active::before{
+    content:"";position:absolute;left:-14px;top:7px;bottom:7px;width:2.5px;
+    background:var(--accent);border-radius:2px;box-shadow:0 0 8px var(--accent-glow);
+  }
+  .nav-badge{margin-left:auto;font-size:10px;font-weight:700;background:var(--red);color:#1c0a07;border-radius:20px;padding:1px 6px;font-family:'IBM Plex Mono';}
+
+  .sys-status{
+    border-top:1px solid var(--line-soft);padding-top:14px;margin-top:14px;
+  }
+  .sys-status-title{font-size:10px;letter-spacing:1.4px;color:var(--text-faint);margin-bottom:9px;font-weight:600;}
+  .sys-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim);padding:3px 2px;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none;box-shadow:0 0 6px var(--accent-glow);animation:pulse 2.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+  /* Main */
+  #main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  #topbar{
+    height:60px;flex:none;display:flex;align-items:center;justify-content:space-between;
+    padding:0 26px;border-bottom:1px solid var(--line-soft);background:rgba(10,14,19,0.7);backdrop-filter:blur(6px);
+    position:relative;z-index:20;
+  }
+  .page-title{font-size:16px;font-weight:600;}
+  .page-title-sub{font-size:11.5px;color:var(--text-faint);margin-top:1px;}
+  .topbar-right{display:flex;align-items:center;gap:16px;}
+  .status-pill{
+    display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:0.8px;
+    padding:5px 11px;border-radius:20px;background:rgba(95,196,174,0.1);border:1px solid rgba(95,196,174,0.3);color:var(--accent);
+  }
+  .clock{font-size:12px;color:var(--text-dim);}
+  .clock .mono{color:var(--text);}
+
+  .bell-wrap{position:relative;}
+  .bell-btn{
+    width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    color:var(--text-dim);border:1px solid var(--line-soft);background:var(--surface);position:relative;
+  }
+  .bell-btn:hover{color:var(--text);border-color:var(--accent-dim);}
+  .bell-btn svg{width:16px;height:16px;}
+  .bell-count{
+    position:absolute;top:-4px;right:-4px;background:var(--red);color:#1c0a07;font-size:9.5px;font-weight:700;
+    border-radius:20px;padding:1px 5px;font-family:'IBM Plex Mono';border:2px solid var(--bg);
+  }
+  .bell-dropdown{
+    display:none;position:absolute;top:44px;right:0;width:320px;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:0 20px 40px -12px rgba(0,0,0,0.6);overflow:hidden;
+  }
+  .bell-dropdown.show{display:block;}
+  .bell-dropdown-head{padding:12px 14px;border-bottom:1px solid var(--line-soft);font-size:11.5px;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;}
+  .bell-item{padding:11px 14px;border-bottom:1px solid var(--line-soft);display:flex;gap:10px;align-items:flex-start;}
+  .bell-item:hover{background:var(--surface-3);}
+  .bell-sev-dot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex:none;}
+  .bell-item-title{font-size:12px;font-weight:600;}
+  .bell-item-meta{font-size:10.5px;color:var(--text-faint);margin-top:1px;}
+  .bell-dropdown-foot{padding:10px 14px;text-align:center;font-size:12px;color:var(--accent);font-weight:600;}
+  .bell-dropdown-foot:hover{background:var(--surface-3);}
+
+  #content{flex:1;overflow-y:auto;padding:22px 26px 60px 26px;}
+  .page{display:none;animation:fadein .25s ease;}
+  .page.active{display:block;}
+  @keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+  /* ---------- shared panel/card styling ---------- */
+  .panel{
+    background:linear-gradient(180deg, var(--surface), var(--surface-2) 130%);
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius);
+    position:relative;
+  }
+  .panel-glow{box-shadow:0 0 0 1px rgba(95,196,174,0.08), 0 12px 30px -18px rgba(0,0,0,0.6);}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 17px;border-bottom:1px solid var(--line-soft);gap:12px;flex-wrap:wrap;}
+  .panel-title{font-size:12px;font-weight:600;letter-spacing:1px;color:var(--text-dim);}
+  .panel-body{padding:17px;}
+
+  .grid{display:grid;gap:16px;}
+  .kpi-grid{grid-template-columns:repeat(4,1fr);}
+  .kpi-card{
+    padding:17px 18px;border-radius:var(--radius);
+    background:linear-gradient(160deg, var(--surface), var(--surface-2));
+    border:1px solid var(--line-soft);
+    display:flex;flex-direction:column;gap:6px;
+  }
+  .kpi-top{display:flex;align-items:center;justify-content:space-between;}
+  .kpi-icon{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:rgba(95,196,174,0.1);color:var(--accent);}
+  .kpi-icon svg{width:15px;height:15px;}
+  .kpi-value{font-size:26px;font-weight:600;font-family:'IBM Plex Mono';letter-spacing:-0.5px;}
+  .kpi-label{font-size:11.5px;color:var(--text-faint);letter-spacing:0.3px;}
+  .kpi-trend{font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px;}
+  .trend-up{color:var(--accent);}
+  .trend-down{color:var(--red);}
+
+  .badge{
+    font-size:10.5px;font-weight:600;letter-spacing:0.6px;padding:2.5px 8px;border-radius:20px;
+    display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+  }
+  .badge-live{background:rgba(217,105,90,0.12);color:var(--red);border:1px solid rgba(217,105,90,0.35);}
+  .badge-live .dot{background:var(--red);box-shadow:0 0 6px rgba(217,105,90,0.5);}
+  .badge-ok{background:rgba(95,196,174,0.1);color:var(--accent);border:1px solid rgba(95,196,174,0.3);}
+  .badge-amber{background:rgba(217,154,78,0.1);color:var(--amber);border:1px solid rgba(217,154,78,0.3);}
+  .badge-blue{background:rgba(91,143,201,0.1);color:var(--blue);border:1px solid rgba(91,143,201,0.3);}
+  .badge-violet{background:rgba(155,143,214,0.1);color:var(--violet);border:1px solid rgba(155,143,214,0.3);}
+  .badge-red{background:rgba(217,105,90,0.1);color:var(--red);border:1px solid rgba(217,105,90,0.3);}
+
+  .btn{
+    font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:var(--radius-sm);
+    border:1px solid var(--line);background:var(--surface-3);color:var(--text);
+    display:inline-flex;align-items:center;gap:7px;transition:all .15s;
+  }
+  .btn:hover{border-color:var(--accent-dim);background:#212c37;}
+  .btn-primary{background:linear-gradient(160deg, var(--accent), var(--accent-dim));border:none;color:#06120f;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn svg{width:14px;height:14px;}
+  .btn-sm{padding:6px 11px;font-size:11.5px;}
+
+  .tag{font-size:10.5px;padding:2px 7px;border-radius:5px;background:var(--surface-3);color:var(--text-dim);font-family:'IBM Plex Mono';}
+
+  hr.sep{border:none;border-top:1px solid var(--line-soft);margin:14px 0;}
+
+  input[type=text],input[type=search],select,textarea{
+    background:var(--surface-3);border:1px solid var(--line);color:var(--text);
+    padding:8px 12px;border-radius:var(--radius-sm);font-size:12.5px;font-family:inherit;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent-dim);}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{
+    text-align:left;font-size:10.5px;letter-spacing:0.8px;color:var(--text-faint);
+    padding:9px 12px;border-bottom:1px solid var(--line-soft);font-weight:600;position:sticky;top:0;background:var(--surface);
+  }
+  tbody td{padding:9px 12px;border-bottom:1px solid var(--line-soft);color:var(--text-dim);}
+  tbody tr{cursor:pointer;transition:background .12s;}
+  tbody tr:hover{background:var(--surface-2);}
+  tbody tr.selected{background:rgba(95,196,174,0.08);}
+  tbody td.strong{color:var(--text);font-weight:500;}
+
+  .tooltip{position:relative;}
+  .tooltip:hover::after{
+    content:attr(data-tip);position:absolute;bottom:130%;left:50%;transform:translateX(-50%);
+    background:#000;color:#fff;padding:5px 9px;border-radius:5px;font-size:10.5px;white-space:nowrap;
+    z-index:50;border:1px solid var(--line);
+  }
+
+  .empty-state{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;
+    color:var(--text-faint);gap:10px;text-align:center;
+  }
+  .empty-state svg{width:34px;height:34px;opacity:.5;}
+
+  /* ---------- 3D scene viewer ---------- */
+  .scene-wrap{
+    position:relative;border-radius:var(--radius);overflow:hidden;
+    background:radial-gradient(ellipse at 50% 20%, #10222a 0%, #060a0e 70%);
+    border:1px solid var(--line-soft);
+  }
+  .scene-viewport{width:100%;height:100%;perspective:1400px;overflow:hidden;position:relative;cursor:grab; background:radial-gradient(ellipse at 50% 20%, #10222a 0%, #060a0e 70%);}
+  .scene-viewport:active{cursor:grabbing;}
+  .scene-viewport canvas{position:absolute;inset:0;width:100%!important;height:100%!important;display:block;}
+  .scene-world{
+    position:absolute;left:50%;top:52%;
+    transform-style:preserve-3d;
+    transform:translate(-50%,-50%) rotateX(58deg) rotateZ(-28deg) scale(0.62);
+    width:1000px;height:700px;
+    transition:transform .05s linear;
+  }
+  .scene-floor{
+    position:absolute;left:0;top:0;width:1000px;height:700px;
+    background-image:
+      linear-gradient(rgba(95,196,174,0.09) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(95,196,174,0.09) 1px, transparent 1px),
+      linear-gradient(140deg,#0c1a1f,#0a1418 60%, #091116);
+    background-size:40px 40px, 40px 40px, 100% 100%;
+    border:1px solid rgba(95,196,174,0.12);
+  }
+  .scene-road{position:absolute;background:#222d36;box-shadow:0 0 0 1px #2c3944;}
+  .scene-veg{position:absolute;border-radius:50%;background:radial-gradient(circle at 35% 30%, #3f6a52, #1d3527);transform-style:preserve-3d;}
+  .bldg{position:absolute;transform-style:preserve-3d;}
+  .bldg .face{position:absolute;border:1px solid rgba(0,0,0,0.35);}
+  .bldg .face-top{background:linear-gradient(160deg,#3c4a58,#2a3540);}
+  .bldg .face-front{background:linear-gradient(180deg,#232e38,#161e26);}
+  .bldg .face-side{background:linear-gradient(180deg,#1b242c,#10161c);}
+
+  .marker{
+    position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:50%;cursor:pointer;
+    font-size:13px;transform-style:preserve-3d;
+    box-shadow:0 0 0 2px rgba(0,0,0,0.4), 0 0 12px rgba(0,0,0,0.5);
+    transition:transform .12s;
+  }
+  .marker:hover{filter:brightness(1.25);}
+  .marker.selected{outline:2px solid #fff;outline-offset:2px;}
+  .m-person{background:radial-gradient(circle at 35% 30%, #7fd3c2, #2d6f60);}
+  .m-vehicle{background:radial-gradient(circle at 35% 30%, #7fa8e0, #2c5384);}
+  .m-truck{background:radial-gradient(circle at 35% 30%, #e0b06f, #8a5f26);}
+  .m-equipment{background:radial-gradient(circle at 35% 30%, #d68f8f, #8a3a3a);}
+  .m-building{background:radial-gradient(circle at 35% 30%, #b6a8e6, #5d4d97);}
+  .m-waypoint{background:radial-gradient(circle at 35% 30%, #f0d68f, #a67e1f);}
+
+  .scene-controls{position:absolute;top:14px;right:14px;display:flex;flex-direction:column;gap:6px;z-index:5;}
+  .scene-btn{
+    width:30px;height:30px;border-radius:7px;background:rgba(18,24,32,0.85);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;color:var(--text-dim);backdrop-filter:blur(4px);
+  }
+  .scene-btn:hover{color:var(--text);border-color:var(--accent-dim);}
+  .scene-btn svg{width:14px;height:14px;}
+
+  .layer-panel{
+    position:absolute;top:14px;left:14px;z-index:5;width:172px;
+    background:rgba(14,19,26,0.88);border:1px solid var(--line);border-radius:var(--radius-sm);
+    backdrop-filter:blur(6px);padding:10px 12px;
+  }
+  .layer-panel-title{font-size:10px;letter-spacing:1px;color:var(--text-faint);font-weight:600;margin-bottom:8px;}
+  .layer-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:var(--text-dim);}
+  .layer-row input{accent-color:var(--accent);width:13px;height:13px;}
+
+  .obj-info-panel{
+    position:absolute;bottom:14px;right:14px;z-index:6;width:240px;
+    background:rgba(14,19,26,0.94);border:1px solid var(--accent-dim);border-radius:var(--radius-sm);
+    box-shadow:0 0 24px rgba(95,196,174,0.15);
+    padding:14px 15px;display:none;
+  }
+  .obj-info-panel.show{display:block;animation:fadein .18s ease;}
+  .obj-info-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .obj-info-id{font-size:12.5px;font-weight:600;font-family:'IBM Plex Mono';color:var(--accent);}
+  .obj-info-close{color:var(--text-faint);font-size:16px;line-height:1;cursor:pointer;}
+  .obj-info-row{display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;color:var(--text-dim);}
+  .obj-info-row span:last-child{color:var(--text);font-family:'IBM Plex Mono';}
+
+  .digital-twin-status{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:5;text-align:center;
+  }
+
+  /* Overview hero */
+  .hero-card{position:relative;height:340px;overflow:hidden;}
+  .hero-stats{
+    position:absolute;bottom:0;left:0;right:0;display:flex;gap:0;
+    background:linear-gradient(0deg, rgba(9,13,17,0.92), rgba(9,13,17,0.5));
+    padding:16px 20px;border-top:1px solid var(--line-soft);
+  }
+  .hero-stat{flex:1;border-right:1px solid var(--line-soft);padding:0 16px;}
+  .hero-stat:first-child{padding-left:0;}
+  .hero-stat:last-child{border-right:none;}
+  .hero-stat-val{font-family:'IBM Plex Mono';font-size:19px;font-weight:600;}
+  .hero-stat-label{font-size:10.5px;color:var(--text-faint);margin-top:2px;letter-spacing:0.4px;}
+
+  .insight-panel{
+    background:linear-gradient(135deg, rgba(95,196,174,0.07), rgba(95,196,174,0.01));
+    border:1px solid rgba(95,196,174,0.22);border-radius:var(--radius);padding:17px 19px;
+  }
+  .insight-head{display:flex;align-items:center;gap:9px;margin-bottom:10px;}
+  .insight-icon{width:26px;height:26px;border-radius:7px;background:rgba(95,196,174,0.15);display:flex;align-items:center;justify-content:center;color:var(--accent);}
+  .insight-icon svg{width:14px;height:14px;}
+  .insight-title{font-size:12.5px;font-weight:600;}
+  .insight-text{font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:10px;}
+  .insight-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;}
+  .insight-list li{font-size:12.5px;color:var(--text-dim);display:flex;gap:8px;align-items:flex-start;}
+  .insight-list li::before{content:"›";color:var(--accent);font-weight:700;}
+
+  /* two column layouts */
+  .cols-2{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;}
+  .cols-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .cols-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+
+  /* Telemetry */
+  .telem-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .telem-item{padding:12px 14px;border-radius:var(--radius-sm);background:var(--surface-3);border:1px solid var(--line-soft);}
+  .telem-label{font-size:10px;color:var(--text-faint);letter-spacing:0.6px;margin-bottom:5px;}
+  .telem-value{font-family:'IBM Plex Mono';font-size:18px;font-weight:600;}
+
+  .mission-stat{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line-soft);font-size:12.5px;gap:10px;}
+  .mission-stat:last-child{border-bottom:none;}
+  .mission-stat span:first-child{color:var(--text-faint);}
+  .mission-stat span:last-child{font-family:'IBM Plex Mono';font-weight:500;text-align:right;}
+
+  /* AI detection frame */
+  .frame-wrap{position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line-soft);height:420px;
+    background:linear-gradient(160deg,#141d1a,#0b1210 55%, #0a1512);}
+  .frame-noise{position:absolute;inset:0;opacity:.5;
+    background-image:repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0px, transparent 2px, transparent 4px);}
+  .bbox{position:absolute;border:1.5px solid var(--accent);border-radius:3px;}
+  .bbox-label{
+    position:absolute;top:-19px;left:-1.5px;background:var(--accent);color:#06120f;
+    font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px 3px 0 0;font-family:'IBM Plex Mono';white-space:nowrap;
+  }
+  .bbox.b-vehicle{border-color:var(--blue);}
+  .bbox.b-vehicle .bbox-label{background:var(--blue);color:#06101c;}
+  .bbox.b-truck{border-color:var(--amber);}
+  .bbox.b-truck .bbox-label{background:var(--amber);color:#1c1305;}
+  .bbox.b-equipment{border-color:var(--red);}
+  .bbox.b-equipment .bbox-label{background:var(--red);color:#1c0a07;}
+  .bbox.b-defect{border-color:var(--violet);border-style:dashed;}
+  .bbox.b-defect .bbox-label{background:var(--violet);color:#140f24;}
+
+  .loading-overlay{
+    position:absolute;inset:0;background:rgba(6,9,12,0.88);display:none;
+    align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:10;
+  }
+  .loading-overlay.show{display:flex;}
+  .spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--surface-3);border-top-color:var(--accent);animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .loading-step{font-size:12.5px;color:var(--text-dim);font-family:'IBM Plex Mono';opacity:0;transition:opacity .3s;}
+  .loading-step.active{opacity:1;color:var(--accent);}
+
+  /* Timeline */
+  .timeline{display:flex;align-items:center;gap:0;margin:6px 0 4px 0;}
+  .tl-node{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;flex:1;position:relative;}
+  .tl-dot{width:14px;height:14px;border-radius:50%;background:var(--surface-3);border:2px solid var(--line);z-index:2;transition:all .15s;}
+  .tl-node.active .tl-dot{background:var(--accent);border-color:var(--accent);box-shadow:0 0 10px var(--accent-glow);}
+  .tl-node.selected-a .tl-dot{background:var(--blue);border-color:var(--blue);}
+  .tl-node.selected-b .tl-dot{background:var(--amber);border-color:var(--amber);}
+  .tl-line{position:absolute;top:6px;left:-50%;width:100%;height:2px;background:var(--line);z-index:1;}
+  .tl-node:first-child .tl-line{display:none;}
+  .tl-label{font-size:11.5px;font-weight:600;color:var(--text-dim);}
+  .tl-node.active .tl-label{color:var(--text);}
+  .tl-date{font-size:10px;color:var(--text-faint);font-family:'IBM Plex Mono';}
+
+  .change-card{display:flex;gap:12px;padding:12px 14px;border-radius:var(--radius-sm);background:var(--surface-3);border:1px solid var(--line-soft);align-items:flex-start;}
+  .change-dot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:4px;}
+  .change-title{font-size:12.5px;font-weight:600;}
+  .change-desc{font-size:11.5px;color:var(--text-faint);margin-top:2px;}
+
+  .split-view{display:grid;grid-template-columns:1fr 1fr;gap:2px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line-soft);}
+  .split-pane{position:relative;height:280px;background:linear-gradient(160deg,#101820,#0a1116);}
+  .split-tag{position:absolute;top:10px;left:10px;z-index:3;}
+  .split-pane .scene-world{transform:translate(-50%,-50%) rotateX(58deg) rotateZ(-28deg) scale(0.38);}
+
+  /* Analytics chart cards */
+  .chart-card{padding:16px 17px;}
+  .chart-card canvas{max-height:220px;}
+  .progress-track{width:100%;height:8px;background:var(--surface-3);border-radius:6px;overflow:hidden;margin-top:8px;}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent-dim),var(--accent));border-radius:6px;}
+  .health-track{width:100%;height:6px;background:var(--surface-3);border-radius:6px;overflow:hidden;}
+  .health-fill{height:100%;border-radius:6px;}
+
+  /* Mission planning */
+  .template-card{
+    padding:14px 15px;border-radius:var(--radius-sm);background:var(--surface-3);border:1px solid var(--line-soft);
+    cursor:pointer;transition:border-color .15s, background .15s;
+  }
+  .template-card:hover{border-color:var(--accent-dim);}
+  .template-card.selected{border-color:var(--accent);background:rgba(95,196,174,0.07);}
+  .template-name{font-size:13px;font-weight:600;margin-bottom:3px;}
+  .template-meta{font-size:11px;color:var(--text-faint);}
+  .checklist-item{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:12.5px;color:var(--text-dim);border-bottom:1px solid var(--line-soft);}
+  .checklist-item:last-child{border-bottom:none;}
+  .checklist-item input{accent-color:var(--accent);width:14px;height:14px;}
+  .checklist-item.done{color:var(--text-faint);text-decoration:line-through;}
+
+  .mode-toggle{display:flex;background:var(--surface-3);border-radius:20px;padding:3px;border:1px solid var(--line-soft);width:fit-content;}
+  .mode-toggle button{
+    padding:6px 14px;border-radius:20px;font-size:11.5px;font-weight:600;color:var(--text-faint);background:transparent;border:none;
+  }
+  .mode-toggle button.active{background:var(--accent);color:#06120f;}
+
+  /* Predictive maintenance */
+  .asset-row{display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:var(--radius-sm);background:var(--surface-3);border:1px solid var(--line-soft);}
+  .asset-name{font-size:13px;font-weight:600;}
+  .asset-meta{font-size:11px;color:var(--text-faint);margin-top:2px;}
+  .asset-score{font-family:'IBM Plex Mono';font-size:17px;font-weight:600;width:52px;text-align:right;}
+
+  /* Team collaboration */
+  .team-card{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:var(--radius-sm);background:var(--surface-3);border:1px solid var(--line-soft);}
+  .avatar{
+    width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:700;color:#06120f;background:linear-gradient(160deg,var(--accent),var(--accent-dim));position:relative;
+  }
+  .avatar.away{background:linear-gradient(160deg,var(--amber),var(--amber-dim));}
+  .presence-dot{position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;border:2px solid var(--surface-3);background:var(--accent);}
+  .presence-dot.away{background:var(--amber);}
+  .presence-dot.offline{background:var(--text-faint);}
+  .activity-item{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--line-soft);}
+  .activity-item:last-child{border-bottom:none;}
+  .activity-text{font-size:12.5px;color:var(--text-dim);}
+  .activity-text b{color:var(--text);font-weight:600;}
+  .activity-time{font-size:10.5px;color:var(--text-faint);margin-top:2px;}
+
+  /* Alerts */
+  .alert-row{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;border-radius:var(--radius-sm);background:var(--surface-3);border:1px solid var(--line-soft);}
+  .alert-icon{width:30px;height:30px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;}
+  .alert-icon svg{width:15px;height:15px;}
+  .alert-title{font-size:12.5px;font-weight:600;}
+  .alert-desc{font-size:11.5px;color:var(--text-faint);margin-top:2px;}
+  .alert-time{font-size:10.5px;color:var(--text-faint);margin-left:auto;flex:none;font-family:'IBM Plex Mono';}
+  .filter-tabs{display:flex;gap:6px;}
+  .filter-tab{padding:5px 12px;border-radius:20px;font-size:11.5px;font-weight:600;background:var(--surface-3);color:var(--text-faint);border:1px solid var(--line-soft);}
+  .filter-tab.active{background:rgba(95,196,174,0.12);color:var(--accent);border-color:rgba(95,196,174,0.3);}
+
+  footer.tagline{
+    margin-top:26px;padding:22px 0 4px 0;text-align:center;color:var(--text-faint);font-size:12px;letter-spacing:0.3px;
+    border-top:1px solid var(--line-soft);
+  }
+  footer.tagline b{color:var(--text-dim);font-weight:600;}
+
+  @media (max-width:1100px){
+    .kpi-grid{grid-template-columns:repeat(2,1fr);}
+    .cols-2{grid-template-columns:1fr;}
+    .cols-3{grid-template-columns:1fr;}
+    .cols-4{grid-template-columns:repeat(2,1fr);}
+    .telem-grid{grid-template-columns:repeat(2,1fr);}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <div class="brand-name">AEROTWIN AI</div>
+        <div class="brand-sub">MISSION CONTROL</div>
+      </div>
+    </div>
+    <div id="navContainer"></div>
+    <div class="sys-status">
+      <div class="sys-status-title">SYSTEM STATUS</div>
+      <div class="sys-row"><span class="dot"></span> AI Engine Online</div>
+      <div class="sys-row"><span class="dot" style="animation-delay:.4s"></span> 3D Engine Online</div>
+      <div class="sys-row"><span class="dot" style="animation-delay:.8s"></span> MAVLink Link Ready</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="topbar">
+      <div>
+        <div class="page-title" id="pageTitle">Overview</div>
+        <div class="page-title-sub" id="pageSub">AI-Powered Dynamic 3D Digital Twin</div>
+      </div>
+      <div class="topbar-right">
+        <span class="badge badge-ok"><span class="dot"></span> SYSTEM ONLINE</span>
+        <div class="clock">Last Update: <span class="mono" id="clockNow">14:32:18</span></div>
+        <div class="bell-wrap">
+          <button class="bell-btn" id="bellBtn">${''}
+          </button>
+          <div class="bell-dropdown" id="bellDropdown"></div>
+        </div>
+      </div>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ICONS (lightweight inline SVG set — feather-style)
+   ============================================================ */
+const ICONS = {
+  home:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>`,
+  globe:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/></svg>`,
+  drone:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M5 5l4 4M19 5l-4 4M5 19l4-4M19 19l-4-4"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg>`,
+  bot:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 2v6M9 13h.01M15 13h.01"/></svg>`,
+  refresh:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
+  pin:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  bar:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>`,
+  settings:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  swap:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+  zap:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  plus:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  minus:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  target:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+  search:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  layers:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
+  box:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+  battery:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="18" height="12" rx="2"/><line x1="23" y1="13" x2="23" y2="11"/></svg>`,
+  reset:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/></svg>`,
+  bell:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+  map:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>`,
+  wrench:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 1 1-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 1 1 5.4-5.4l-3-3z"/></svg>`,
+  briefcase:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
+  file:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  users:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  radio:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-8.49a6 6 0 0 0 0 8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>`,
+  alert:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  check:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  send:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`,
+  trend:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+  download:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
+};
+
+/* ============================================================
+   MOCK DATA MODULE  (structured to be swapped for real API later)
+   ============================================================ */
+const AppData = (function(){
+  function seededRandom(seed){ let s = seed; return function(){ s = (s*9301+49297)%233280; return s/233280; }; }
+  const rnd = seededRandom(42);
+
+  const TYPE_ICON = {Person:'👤',Vehicle:'🚗',Truck:'🚚',Equipment:'🏗',Building:'🏢'};
+  const TYPE_CLASS = {Person:'m-person',Vehicle:'m-vehicle',Truck:'m-truck',Equipment:'m-equipment',Building:'m-building'};
+  const WEIGHTS = {Person:24,Vehicle:11,Equipment:5,Building:7,Truck:3};
+
+  const objects = [];
+  let id = 1;
+  Object.keys(WEIGHTS).forEach(type=>{
+    for(let i=0;i<WEIGHTS[type];i++){
+      const x = 60 + rnd()*880;
+      const y = 60 + rnd()*580;
+      const lat = (26.9124 + (rnd()-0.5)*0.02).toFixed(6);
+      const lon = (75.7873 + (rnd()-0.5)*0.02).toFixed(6);
+      const conf = (88 + rnd()*11.8).toFixed(1);
+      const status = rnd() > 0.45 ? 'Moving' : 'Stationary';
+      const mm1 = 10+Math.floor(rnd()*10), mm2 = mm1+Math.floor(rnd()*20)+2;
+      objects.push({
+        id: 'OBJ-'+String(id).padStart(3,'0'),
+        num: id,
+        type, icon: TYPE_ICON[type], cls: TYPE_CLASS[type],
+        x, y, alt: (type==='Person'?1.7:type==='Building'?0:8+rnd()*30).toFixed(1),
+        lat, lon, confidence: conf, status: type==='Building'?'Static':status,
+        firstDetected: `14:${String(mm1).padStart(2,'0')}`,
+        lastDetected: `14:${String(mm2).padStart(2,'0')}`
+      });
+      id++;
+    }
+  });
+  const o24 = objects.find(o=>o.num===24);
+  if(o24){ o24.type='Vehicle'; o24.icon='🚗'; o24.cls='m-vehicle'; o24.status='Moving'; o24.confidence='96.4'; o24.lat='26.912481'; o24.lon='75.798823'; o24.alt='18.4'; o24.firstDetected='14:21'; o24.lastDetected='14:32'; }
+
+  const missions = [
+    {id:'AT-2026-001', date:'20 September 2026', status:'PROCESSING', duration:'08:42', images:1284, area:'2.84 km²', altitude:'120 m', gps:'±0.8 m'},
+    {id:'AT-2026-000B', date:'17 September 2026', status:'COMPLETE', duration:'07:58', images:1140, area:'2.71 km²', altitude:'115 m', gps:'±0.9 m'},
+    {id:'AT-2026-000A', date:'15 September 2026', status:'COMPLETE', duration:'07:20', images:1042, area:'2.60 km²', altitude:'110 m', gps:'±1.0 m'}
+  ];
+
+  const flights = [
+    {label:'FLIGHT 01', date:'15 Sep 2026', changes:3},
+    {label:'FLIGHT 02', date:'17 Sep 2026', changes:5},
+    {label:'FLIGHT 03', date:'19 Sep 2026', changes:6},
+    {label:'CURRENT', date:'20 Sep 2026', changes:8}
+  ];
+
+  const changes = [
+    {type:'new', color:'var(--accent)', title:'New Object — Vehicle #031', desc:'Detected at 14:18, parked near northern access road.'},
+    {type:'removed', color:'var(--red)', title:'Removed Object — Truck #014', desc:'No longer present in current survey; last seen 17 Sep.'},
+    {type:'moved', color:'var(--amber)', title:'Object Moved — Excavator #007', desc:'Relocated 24.8 m southeast within the construction zone.'},
+    {type:'structural', color:'var(--blue)', title:'Structural Change — Building B', desc:'Footprint increased by 6.8%, consistent with active construction.'},
+    {type:'activity', color:'var(--violet)', title:'Activity Increase', desc:'People detected rose from 15 to 21 between surveys.'}
+  ];
+
+  const insights = [
+    '3 new vehicles detected since the previous survey',
+    '2 tracked objects changed position',
+    'Construction footprint increased by 6.8%',
+    '1 potential obstacle flagged near the access road'
+  ];
+
+  const missionTemplates = [
+    {id:'perimeter', name:'Perimeter Sweep', waypoints:12, duration:'06:30', area:'1.2 km', desc:'Follows the outer boundary for a fast security pass.'},
+    {id:'grid', name:'Grid Survey', waypoints:48, duration:'11:45', area:'2.84 km²', desc:'Lawnmower pattern for full-area 3D reconstruction.'},
+    {id:'corridor', name:'Corridor Mapping', waypoints:20, duration:'08:10', area:'3.4 km', desc:'Follows roads and pipelines for linear infrastructure.'},
+    {id:'point', name:'Point Inspection', waypoints:6, duration:'03:20', area:'—', desc:'Close orbit around a single asset for defect inspection.'}
+  ];
+  const waypoints = [
+    {seq:1, lat:'26.90980', lon:'75.78210', alt:120, action:'Takeoff'},
+    {seq:2, lat:'26.91120', lon:'75.78450', alt:120, action:'Waypoint'},
+    {seq:3, lat:'26.91340', lon:'75.78920', alt:120, action:'Waypoint'},
+    {seq:4, lat:'26.91560', lon:'75.79310', alt:130, action:'Waypoint'},
+    {seq:5, lat:'26.91780', lon:'75.79680', alt:130, action:'Waypoint'},
+    {seq:6, lat:'26.91980', lon:'75.80020', alt:120, action:'Return to Launch'}
+  ];
+  const preflightChecklist = [
+    'GPS lock acquired (12+ satellites)', 'Battery ≥ 90% charge', 'Geofence boundary confirmed',
+    'Gimbal and camera calibrated', 'Airspace clearance obtained', 'Telemetry link verified (MAVLink)'
+  ];
+
+  const assets = [
+    {name:'Building B — Facade', category:'Structure', health:62, trend:'declining', window:'4–6 weeks', lastInspected:'19 Sep 2026', action:'Schedule structural inspection'},
+    {name:'Excavator Unit #007', category:'Equipment', health:78, trend:'stable', window:'10–12 weeks', lastInspected:'18 Sep 2026', action:'Routine hydraulic check'},
+    {name:'Substation Transformer', category:'Electrical', health:41, trend:'declining', window:'1–2 weeks', lastInspected:'20 Sep 2026', action:'Priority thermal re-scan'},
+    {name:'Access Road Surface', category:'Civil', health:85, trend:'stable', window:'16+ weeks', lastInspected:'17 Sep 2026', action:'Monitor next cycle'},
+    {name:'Crane Unit 2', category:'Equipment', health:69, trend:'declining', window:'6–8 weeks', lastInspected:'19 Sep 2026', action:'Inspect boom weld points'}
+  ];
+
+  const defectClasses = [
+    {name:'Crack', count:9, severity:'high'},
+    {name:'Corrosion', count:6, severity:'medium'},
+    {name:'Spalling', count:4, severity:'medium'},
+    {name:'Misalignment', count:3, severity:'low'},
+    {name:'Thermal Anomaly', count:5, severity:'high'}
+  ];
+
+  const alerts = [
+    {sev:'critical', title:'Substation transformer health critical', desc:'Predicted maintenance health score dropped below 45%.', time:'2 min ago'},
+    {sev:'warning', title:'New defect detected — Building B', desc:'Thermal anomaly flagged with 93.1% confidence.', time:'14 min ago'},
+    {sev:'warning', title:'Object moved outside geofence', desc:'Excavator #007 relocated 24.8 m from last survey.', time:'26 min ago'},
+    {sev:'info', title:'Mission AT-2026-001 processing complete', desc:'1,284 images processed, 3D reconstruction at 94%.', time:'1 hr ago'},
+    {sev:'critical', title:'Drone battery below threshold', desc:'AT-2026-001 battery reached 18% mid-flight.', time:'2 hr ago'},
+    {sev:'info', title:'Team comment added', desc:'Priya flagged Object #031 for manual review.', time:'3 hr ago'}
+  ];
+
+  const team = [
+    {name:'Priya Sharma', role:'Mission Lead', initials:'PS', status:'online'},
+    {name:'Arjun Mehta', role:'AI/ML Engineer', initials:'AM', status:'online'},
+    {name:'Kabir Rao', role:'GIS Analyst', initials:'KR', status:'away'},
+    {name:'Sana Iyer', role:'Drone Operator', initials:'SI', status:'offline'}
+  ];
+  const activity = [
+    {who:'Priya Sharma', text:'flagged <b>Object #031</b> for manual review', time:'8 min ago'},
+    {who:'Arjun Mehta', text:'approved the AI detection results for <b>AT-2026-001</b>', time:'32 min ago'},
+    {who:'Kabir Rao', text:'added a note on <b>Building B</b> structural change', time:'1 hr ago'},
+    {who:'Sana Iyer', text:'completed pre-flight checklist for <b>Grid Survey</b>', time:'2 hr ago'}
+  ];
+
+  return {objects, missions, flights, changes, insights, TYPE_ICON, TYPE_CLASS,
+    missionTemplates, waypoints, preflightChecklist, assets, defectClasses, alerts, team, activity};
+})();
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+const NAV_SECTIONS = [
+  {label:'OPERATIONS', items:[
+    {id:'overview', label:'Overview', icon:'home'},
+    {id:'planning', label:'Mission Planning', icon:'map'},
+    {id:'mission', label:'Drone Mission', icon:'drone'},
+    {id:'twin', label:'3D Digital Twin', icon:'globe'}
+  ]},
+  {label:'INTELLIGENCE', items:[
+    {id:'detection', label:'AI Defect Detection', icon:'bot'},
+    {id:'change', label:'Change Detection', icon:'swap'},
+    {id:'maintenance', label:'Predictive Maintenance', icon:'wrench'},
+    {id:'geo', label:'Geospatial Intelligence', icon:'pin'}
+  ]},
+  {label:'MANAGEMENT', items:[
+    {id:'executive', label:'Executive Dashboard', icon:'briefcase'},
+    {id:'analytics', label:'Reports & Analytics', icon:'file'},
+    {id:'alerts', label:'Alerts', icon:'bell', badge:true},
+    {id:'team', label:'Team Collaboration', icon:'users'},
+    {id:'settings', label:'Settings', icon:'settings'}
+  ]}
+];
+const PAGE_SUB = {
+  overview:'AI-Powered Dynamic 3D Digital Twin', planning:'Autonomous route planning and mission templates',
+  twin:'Interactive reconstruction of the surveyed environment', mission:'Live MAVLink telemetry and flight tracking',
+  detection:'AI-powered object and defect detection over drone imagery', change:'Multi-survey comparison and anomaly tracking',
+  maintenance:'Asset health scoring and failure prediction', geo:'Object coordinates and spatial search',
+  executive:'Fleet-wide performance for leadership', analytics:'Detection and reconstruction performance',
+  alerts:'Real-time system and mission alerts', team:'Collaborate with your survey team', settings:'System configuration'
+};
+
+function renderNav(){
+  const container = document.getElementById('navContainer');
+  container.innerHTML = NAV_SECTIONS.map(sec=>`
+    <div class="nav-section">
+      <div class="nav-section-label">${sec.label}</div>
+      <nav>
+        ${sec.items.map(p=>`
+          <a href="#" class="nav-item" data-page="${p.id}">${ICONS[p.icon]}<span>${p.label}</span>${p.badge?`<span class="nav-badge" id="navAlertBadge">${AppData.alerts.length}</span>`:''}</a>
+        `).join('')}
+      </nav>
+    </div>
+  `).join('');
+  container.querySelectorAll('.nav-item').forEach(el=>{
+    el.addEventListener('click', e=>{ e.preventDefault(); goTo(el.dataset.page); });
+  });
+}
+function goTo(pageId){
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.page===pageId));
+  document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active', el.id==='page-'+pageId));
+  document.getElementById('pageTitle').textContent = document.querySelector(`.nav-item[data-page="${pageId}"] span`).textContent;
+  document.getElementById('pageSub').textContent = PAGE_SUB[pageId];
+  document.getElementById('bellDropdown').classList.remove('show');
+  if(pageId==='overview') setTimeout(()=>LiveReconScene.init('heroSceneViewport'), 10);
+  if(pageId==='twin') setTimeout(()=>SceneKit.init('twinScene'),10);
+  if(pageId==='change') setTimeout(()=>{SceneKit.init('changeSceneA',0.85); SceneKit.init('changeSceneB',0.85);},10);
+  if(pageId==='planning') setTimeout(()=>SceneKit.init('planningScene',0.7,true),10);
+  if(pageId==='analytics') setTimeout(renderAnalyticsCharts,10);
+  if(pageId==='executive') setTimeout(renderExecutiveCharts,10);
+  if(pageId==='maintenance') setTimeout(renderMaintenanceChart,10);
+  if(pageId==='detection') setTimeout(renderDetectionChart,10);
+}
+
+/* Live clock */
+function tickClock(){
+  const now = new Date();
+  document.getElementById('clockNow').textContent = now.toTimeString().slice(0,8);
+}
+setInterval(tickClock, 1000);
+
+/* ============================================================
+   NOTIFICATION BELL
+   ============================================================ */
+const SEV_COLOR = {critical:'var(--red)', warning:'var(--amber)', info:'var(--blue)'};
+function renderBell(){
+  document.getElementById('bellBtn').innerHTML = ICONS.bell + `<span class="bell-count">${AppData.alerts.length}</span>`;
+  const dd = document.getElementById('bellDropdown');
+  dd.innerHTML = `
+    <div class="bell-dropdown-head">REAL-TIME ALERTS</div>
+    ${AppData.alerts.slice(0,4).map(a=>`
+      <div class="bell-item">
+        <div class="bell-sev-dot" style="background:${SEV_COLOR[a.sev]};box-shadow:0 0 6px ${SEV_COLOR[a.sev]};"></div>
+        <div><div class="bell-item-title">${a.title}</div><div class="bell-item-meta">${a.time}</div></div>
+      </div>
+    `).join('')}
+    <div class="bell-dropdown-foot" id="viewAllAlerts">View all alerts</div>
+  `;
+  document.getElementById('bellBtn').addEventListener('click', (e)=>{ e.stopPropagation(); dd.classList.toggle('show'); });
+  document.getElementById('viewAllAlerts').addEventListener('click', ()=>{ dd.classList.remove('show'); goTo('alerts'); });
+  document.addEventListener('click', (e)=>{ if(!dd.contains(e.target) && e.target.id!=='bellBtn') dd.classList.remove('show'); });
+}
+function simulateLiveAlert(){
+  const pool = [
+    {sev:'info', title:'New telemetry packet received', desc:'MAVLink heartbeat nominal.'},
+    {sev:'warning', title:'Object confidence below threshold', desc:'Re-scan recommended for Object #018.'},
+    {sev:'info', title:'Mission checkpoint reached', desc:'Waypoint 4 of 6 completed.'}
+  ];
+  setInterval(()=>{
+    const a = pool[Math.floor(Math.random()*pool.length)];
+    AppData.alerts.unshift({...a, time:'just now'});
+    if(AppData.alerts.length>12) AppData.alerts.pop();
+    renderBell();
+    const badge = document.getElementById('navAlertBadge');
+    if(badge) badge.textContent = AppData.alerts.length;
+    if(document.getElementById('page-alerts') && document.getElementById('page-alerts').classList.contains('active')) renderAlertsList('all');
+  }, 25000);
+}
+
+/* ============================================================
+   SCENE KIT — reusable CSS-3D digital twin viewer
+   ============================================================ */
+const LiveReconScene = (function () {
+  const instances = {};
+
+  function init(containerId) {
+    if (!window.THREE) return;
+    const container = document.getElementById(containerId);
+    if (!container || instances[containerId]) return;
+
+    const existing = container.querySelector('.scene-world');
+    if (existing) existing.remove();
+    const oldCanvas = container.querySelector('canvas');
+    if (oldCanvas) oldCanvas.remove();
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x071015);
+
+    const camera = new THREE.PerspectiveCamera(48, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(8, 6.5, 10);
+    camera.lookAt(0, 1.5, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.domElement.style.position = 'absolute';
+    renderer.domElement.style.inset = '0';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.display = 'block';
+    container.appendChild(renderer.domElement);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 1.6);
+    scene.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.8);
+    dirLight.position.set(7, 12, 8);
+    scene.add(dirLight);
+
+    const terrainCanvas = document.createElement('canvas');
+    terrainCanvas.width = 1024;
+    terrainCanvas.height = 1024;
+    const terrainCtx = terrainCanvas.getContext('2d');
+
+    const terrainTexture = terrainCtx.createLinearGradient(0, 0, 0, 1024);
+    terrainTexture.addColorStop(0, '#3f5e52');
+    terrainTexture.addColorStop(0.5, '#8ca36c');
+    terrainTexture.addColorStop(1, '#5f7d45');
+    terrainCtx.fillStyle = terrainTexture;
+    terrainCtx.fillRect(0, 0, 1024, 1024);
+
+    for (let i = 0; i < 18; i++) {
+      const x = Math.random() * 1024;
+      const y = Math.random() * 1024;
+      const w = 80 + Math.random() * 180;
+      const h = 80 + Math.random() * 150;
+      const isField = Math.random() > 0.35;
+      terrainCtx.fillStyle = isField ? (Math.random() > 0.4 ? '#a7c35d' : '#8dbb4f') : '#49705a';
+      terrainCtx.fillRect(x, y, w, h);
+      terrainCtx.strokeStyle = 'rgba(255,255,255,0.15)';
+      terrainCtx.lineWidth = 2;
+      terrainCtx.strokeRect(x, y, w, h);
+    }
+
+    terrainCtx.fillStyle = 'rgba(99, 156, 151, 0.7)';
+    terrainCtx.fillRect(550, 500, 300, 220);
+    terrainCtx.fillStyle = 'rgba(138, 182, 210, 0.75)';
+    terrainCtx.fillRect(610, 560, 170, 120);
+
+    terrainCtx.strokeStyle = 'rgba(245, 241, 228, 0.8)';
+    terrainCtx.lineWidth = 4;
+    terrainCtx.beginPath();
+    terrainCtx.moveTo(0, 760);
+    terrainCtx.lineTo(1024, 760);
+    terrainCtx.moveTo(0, 250);
+    terrainCtx.lineTo(1024, 250);
+    terrainCtx.moveTo(470, 0);
+    terrainCtx.lineTo(470, 1024);
+    terrainCtx.moveTo(780, 0);
+    terrainCtx.lineTo(780, 1024);
+    terrainCtx.stroke();
+
+    terrainCtx.fillStyle = 'rgba(144, 82, 44, 0.8)';
+    terrainCtx.beginPath();
+    terrainCtx.moveTo(180, 220);
+    terrainCtx.lineTo(420, 180);
+    terrainCtx.lineTo(480, 360);
+    terrainCtx.lineTo(240, 420);
+    terrainCtx.closePath();
+    terrainCtx.fill();
+
+    terrainCtx.fillStyle = 'rgba(255,255,255,0.22)';
+    for (let i = 0; i < 50; i++) {
+      terrainCtx.fillRect(Math.random() * 1024, Math.random() * 1024, 2, 2);
+    }
+
+    const terrainTextureMap = new THREE.CanvasTexture(terrainCanvas);
+    terrainTextureMap.wrapS = THREE.RepeatWrapping;
+    terrainTextureMap.wrapT = THREE.RepeatWrapping;
+    terrainTextureMap.repeat.set(1, 1);
+
+    const terrain = new THREE.Mesh(
+      new THREE.PlaneGeometry(29, 29, 80, 80),
+      new THREE.MeshStandardMaterial({ map: terrainTextureMap, roughness: 1, metalness: 0.05 })
+    );
+    terrain.rotation.x = -Math.PI / 2;
+    terrain.position.y = -0.18;
+    const terrainPos = terrain.geometry.attributes.position;
+    for (let i = 0; i < terrainPos.count; i++) {
+      const x = terrainPos.getX(i);
+      const y = terrainPos.getY(i);
+      const height = Math.sin(x * 0.9) * 0.18 + Math.cos(y * 0.8) * 0.16 + Math.sin((x + y) * 0.6) * 0.1;
+      terrainPos.setZ(i, height);
+    }
+    terrain.geometry.computeVertexNormals();
+    scene.add(terrain);
+
+    const mapOutline = new THREE.Mesh(
+      new THREE.BoxGeometry(18, 0.05, 18),
+      new THREE.MeshStandardMaterial({ color: 0x0d1b23, transparent: true, opacity: 0.25 })
+    );
+    mapOutline.position.set(0, 0.12, 0);
+    scene.add(mapOutline);
+
+    const roadGroup = new THREE.Group();
+    const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x202d38, roughness: 0.9, metalness: 0.08 });
+    const laneMaterial = new THREE.MeshStandardMaterial({ color: 0x6fd9d0, emissive: 0x6fd9d0, emissiveIntensity: 0.18 });
+
+    const road1 = new THREE.Mesh(new THREE.BoxGeometry(8.8, 0.08, 1.5), roadMaterial);
+    road1.position.set(0, 0.08, 0);
+    roadGroup.add(road1);
+
+    const road2 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 9.6), roadMaterial);
+    road2.position.set(0, 0.08, 0);
+    roadGroup.add(road2);
+
+    const roadLane = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.04, 0.12), laneMaterial);
+    roadLane.position.set(0, 0.12, 0.35);
+    roadGroup.add(roadLane);
+
+    const roadLane2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 7.2), laneMaterial);
+    roadLane2.position.set(0.35, 0.12, 0);
+    roadGroup.add(roadLane2);
+    scene.add(roadGroup);
+
+    const buildingGroup = new THREE.Group();
+    const buildingMeshes = [];
+    const buildingData = [
+      { x: -5.8, z: -2.8, h: 2.4, w: 2.1, d: 2.2 },
+      { x: -2.0, z: -4.5, h: 3.2, w: 2.3, d: 2.3 },
+      { x: 2.0, z: -3.8, h: 2.7, w: 2.0, d: 1.8 },
+      { x: 5.8, z: -2.5, h: 4.0, w: 2.4, d: 2.2 },
+      { x: 6.1, z: 2.2, h: 3.2, w: 2.1, d: 1.8 },
+      { x: -4.8, z: 3.8, h: 2.8, w: 2.6, d: 2.3 },
+      { x: -0.4, z: 3.8, h: 3.5, w: 1.8, d: 1.9 },
+      { x: 3.2, z: 4.4, h: 2.7, w: 2.0, d: 1.7 },
+      { x: 0.0, z: -0.8, h: 1.8, w: 7.4, d: 1.4 }
+    ];
+
+    buildingData.forEach(({ x, z, h, w, d }) => {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color: 0x9bb5c9, roughness: 0.76, metalness: 0.2, transparent: true, opacity: 0.9 })
+      );
+      mesh.position.set(x, h / 2, z);
+      buildingGroup.add(mesh);
+      buildingMeshes.push(mesh);
+    });
+    scene.add(buildingGroup);
+
+    const entityGroup = new THREE.Group();
+    const entityMeshes = [];
+    const entityConfig = {
+      Person: { color: 0x5fc4ae, height: 0.5, type: 'person' },
+      Vehicle: { color: 0x5b8fc9, height: 0.7, type: 'vehicle' },
+      Truck: { color: 0xd99a4e, height: 0.8, type: 'truck' },
+      Equipment: { color: 0xd9695a, height: 0.9, type: 'equipment' },
+      Building: { color: 0x9b8fd6, height: 0.8, type: 'building' }
+    };
+
+    AppData.objects.slice(0, 24).forEach((obj, index) => {
+      const cfg = entityConfig[obj.type] || entityConfig.Person;
+      const x = ((obj.x / 1000) * 22) - 11;
+      const z = ((obj.y / 700) * 22) - 11;
+      let mesh;
+
+      if (obj.type === 'Person') {
+        mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.18, 12, 12),
+          new THREE.MeshStandardMaterial({ color: cfg.color, emissive: cfg.color, emissiveIntensity: 0.25 })
+        );
+      } else if (obj.type === 'Truck') {
+        mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.6, 0.6, 1.2),
+          new THREE.MeshStandardMaterial({ color: cfg.color, emissive: cfg.color, emissiveIntensity: 0.18 })
+        );
+      } else if (obj.type === 'Equipment') {
+        mesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.28, 0.9, 12),
+          new THREE.MeshStandardMaterial({ color: cfg.color, emissive: cfg.color, emissiveIntensity: 0.2 })
+        );
+      } else {
+        mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.42, 0.42, 0.42),
+          new THREE.MeshStandardMaterial({ color: cfg.color, emissive: cfg.color, emissiveIntensity: 0.16 })
+        );
+      }
+
+      const baseY = obj.type === 'Person' ? 0.45 : 0.35;
+      mesh.position.set(x, baseY + Math.sin(index * 0.9) * 0.05, z);
+      mesh.userData = { obj, baseY };
+      entityGroup.add(mesh);
+      entityMeshes.push(mesh);
+    });
+    scene.add(entityGroup);
+
+    const particleCount = 26000;
+    const pointsGeometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const radius = 9 + Math.random() * 8;
+      const angle = Math.random() * Math.PI * 2;
+      const y = Math.random() * 2.3;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const idx = i * 3;
+      positions[idx] = x;
+      positions[idx + 1] = y;
+      positions[idx + 2] = z;
+      const c = new THREE.Color(0x5fc4ae);
+      c.offsetHSL(Math.random() * 0.08, 0.12, 0.04);
+      colors[idx] = c.r;
+      colors[idx + 1] = c.g;
+      colors[idx + 2] = c.b;
+    }
+
+    pointsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    pointsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const particleMaterial = new THREE.PointsMaterial({
+      size: 0.07,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      sizeAttenuation: true
+    });
+    const pointCloud = new THREE.Points(pointsGeometry, particleMaterial);
+    scene.add(pointCloud);
+
+    const scanLine = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 0.22),
+      new THREE.MeshBasicMaterial({ color: 0x5fc4ae, transparent: true, opacity: 0.45, side: THREE.DoubleSide })
+    );
+    scanLine.rotation.x = -Math.PI / 2;
+    scanLine.position.set(0, 0.03, 0);
+    scene.add(scanLine);
+
+    const droneGroup = new THREE.Group();
+    const droneBody = new THREE.Mesh(
+      new THREE.ConeGeometry(0.32, 0.8, 5),
+      new THREE.MeshStandardMaterial({ color: 0xe7c06f, emissive: 0x5d4215, emissiveIntensity: 0.25 })
+    );
+    droneBody.rotation.x = Math.PI / 2;
+    droneGroup.add(droneBody);
+
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 8, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x5fc4ae, transparent: true, opacity: 0.45, side: THREE.DoubleSide })
+    );
+    beam.rotation.z = Math.PI / 2;
+    beam.position.set(0, 0.1, 0);
+    droneGroup.add(beam);
+    scene.add(droneGroup);
+
+    let yaw = 0;
+    let drag = false;
+    let lastX = 0;
+    let lastY = 0;
+    let camYaw = -0.7;
+    let camPitch = 0.65;
+
+    const handlePointerDown = (event) => {
+      drag = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+    };
+    const handlePointerMove = (event) => {
+      if (!drag) return;
+      const dx = event.clientX - lastX;
+      const dy = event.clientY - lastY;
+      camYaw -= dx * 0.005;
+      camPitch = Math.min(Math.max(camPitch - dy * 0.004, 0.2), 1.2);
+      lastX = event.clientX;
+      lastY = event.clientY;
+    };
+    const handlePointerUp = () => { drag = false; };
+
+    container.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    const tick = () => {
+      requestAnimationFrame(tick);
+
+      yaw += 0.006;
+      const orbitRadius = 12;
+      const x = Math.cos(yaw + camYaw) * orbitRadius;
+      const z = Math.sin(yaw + camYaw) * orbitRadius;
+      camera.position.x = x;
+      camera.position.z = z;
+      camera.position.y = 5.2 + Math.sin(camPitch + 0.8) * 2.2;
+      camera.lookAt(0, 1.4, 0);
+
+      droneGroup.position.set(Math.sin(yaw * 1.3) * 6, 1.8 + Math.sin(yaw * 2.2) * 0.7, Math.cos(yaw * 1.5) * 5);
+      droneGroup.rotation.y = -yaw * 1.2;
+      pointCloud.rotation.y += 0.0014;
+      pointCloud.rotation.x = 0.18;
+      scanLine.position.z = Math.sin(yaw * 3.5) * 10;
+      scanLine.rotation.z = yaw * 0.8;
+
+      const pulse = 0.5 + Math.sin(yaw * 14) * 0.12;
+      beam.material.opacity = 0.25 + pulse * 0.2;
+      beam.scale.y = 0.8 + Math.sin(yaw * 12) * 0.2;
+
+      buildingMeshes.forEach((mesh, idx) => {
+        mesh.position.y = 0.1 + Math.sin(yaw * 2.6 + idx) * 0.06;
+      });
+
+      entityMeshes.forEach((mesh, idx) => {
+        const { obj, baseY } = mesh.userData;
+        const bob = Math.sin(yaw * 5 + idx) * 0.08;
+        mesh.position.y = baseY + bob + (obj.type === 'Person' ? 0.12 : 0.0);
+      });
+
+      roadGroup.rotation.y = yaw * 0.2;
+      renderer.render(scene, camera);
+    };
+
+    tick();
+    instances[containerId] = { renderer, scene, camera, container };
+  }
+
+  return { init };
+})();
+
+const SceneKit = (function(){
+  const instances = {};
+
+  const BUILDINGS = [
+    {x:140,y:120,w:90,d:70,h:60,c:1},{x:270,y:150,w:60,d:60,h:100},{x:420,y:110,w:120,d:80,h:44},
+    {x:610,y:160,w:70,d:70,h:130},{x:760,y:130,w:100,d:60,h:52},{x:200,y:400,w:80,d:60,h:38},
+    {x:520,y:440,w:140,d:90,h:70},{x:820,y:420,w:60,d:60,h:90}
+  ];
+  const ROADS = [
+    {x:0,y:260,w:1000,h:14},{x:480,y:0,w:14,h:700},{x:0,y:500,w:1000,h:12}
+  ];
+  const VEG = [ [90,260],[330,300],[500,90],[680,260],[900,300],[150,560],[380,600],[650,560],[930,150],[60,460] ];
+
+  function buildStaticLayer(root){
+    root.querySelectorAll('.bldg,.scene-road,.scene-veg').forEach(n=>n.remove());
+    BUILDINGS.forEach(b=>{
+      const el = document.createElement('div');
+      el.className='bldg'; el.dataset.layer='buildings';
+      el.style.left=b.x+'px'; el.style.top=b.y+'px'; el.style.width=b.w+'px'; el.style.height=b.d+'px';
+      el.style.transform=`translateZ(0px)`;
+      el.innerHTML = `
+        <div class="face face-top" style="width:${b.w}px;height:${b.d}px;transform:rotateX(90deg) translateZ(${b.h}px);"></div>
+        <div class="face face-front" style="width:${b.w}px;height:${b.h}px;transform:translateZ(${b.d}px) translateY(-${b.h}px) rotateX(0deg);top:${b.d}px;"></div>
+        <div class="face face-side" style="width:${b.d}px;height:${b.h}px;transform-origin:left; transform:rotateY(90deg) translateZ(0px) translateY(-${b.h}px);top:${b.d}px;"></div>
+      `;
+      root.appendChild(el);
+    });
+    ROADS.forEach(r=>{
+      const el = document.createElement('div');
+      el.className='scene-road'; el.dataset.layer='roads';
+      el.style.left=r.x+'px'; el.style.top=r.y+'px'; el.style.width=r.w+'px'; el.style.height=r.h+'px';
+      root.appendChild(el);
+    });
+    VEG.forEach(([x,y])=>{
+      const el = document.createElement('div');
+      const s = 22+Math.random()*18;
+      el.className='scene-veg'; el.dataset.layer='vegetation';
+      el.style.left=(x-s/2)+'px'; el.style.top=(y-s/2)+'px'; el.style.width=s+'px'; el.style.height=s+'px';
+      root.appendChild(el);
+    });
+  }
+
+  function project(o){ return {left:o.x, top:o.y}; }
+
+  function buildMarkers(root, onClick){
+    root.querySelectorAll('.marker').forEach(n=>n.remove());
+    AppData.objects.forEach(o=>{
+      const el = document.createElement('div');
+      const p = project(o);
+      el.className = 'marker '+o.cls;
+      el.dataset.layer = o.type==='Person'?'people':o.type==='Vehicle'?'vehicles':o.type==='Truck'?'vehicles':o.type==='Equipment'?'equipment':'buildings';
+      el.style.left = p.left+'px'; el.style.top = p.top+'px';
+      el.style.transform = 'translateZ(6px)';
+      el.textContent = o.icon;
+      el.title = o.id+' — '+o.type;
+      el.addEventListener('click', (e)=>{ e.stopPropagation(); onClick(o, el, root); });
+      root.appendChild(el);
+    });
+  }
+
+  function buildWaypoints(root){
+    root.querySelectorAll('.marker.m-waypoint,.wp-line').forEach(n=>n.remove());
+    const pts = AppData.waypoints.map((w,i)=>({x: 100+i*150, y: 300+((i%2)?-140:140)}));
+    pts.forEach((p,i)=>{
+      const el = document.createElement('div');
+      el.className='marker m-waypoint';
+      el.style.left=p.x+'px'; el.style.top=p.y+'px'; el.style.transform='translateZ(8px)';
+      el.textContent = i+1;
+      el.style.fontSize='11px'; el.style.fontWeight='700'; el.style.color='#241a03';
+      root.appendChild(el);
+    });
+  }
+
+  function init(containerId, initialScale, waypointMode){
+    if(instances[containerId] && instances[containerId].built) { return; }
+    const viewport = document.getElementById(containerId);
+    if(!viewport) return;
+    const world = viewport.querySelector('.scene-world');
+    buildStaticLayer(world);
+    const infoPanel = viewport.parentElement.querySelector('.obj-info-panel');
+
+    function showInfo(o){
+      if(!infoPanel) return;
+      infoPanel.classList.add('show');
+      infoPanel.innerHTML = `
+        <div class="obj-info-head">
+          <span class="obj-info-id">OBJECT #${String(o.num).padStart(3,'0')}</span>
+          <span class="obj-info-close">&times;</span>
+        </div>
+        <div class="obj-info-row"><span>Type</span><span>${o.type}</span></div>
+        <div class="obj-info-row"><span>Confidence</span><span>${o.confidence}%</span></div>
+        <div class="obj-info-row"><span>Latitude</span><span>${o.lat}</span></div>
+        <div class="obj-info-row"><span>Longitude</span><span>${o.lon}</span></div>
+        <div class="obj-info-row"><span>Altitude</span><span>${o.alt} m</span></div>
+        <div class="obj-info-row"><span>Status</span><span>${o.status}</span></div>
+        <div class="obj-info-row"><span>First Detected</span><span>${o.firstDetected}</span></div>
+        <div class="obj-info-row"><span>Last Detected</span><span>${o.lastDetected}</span></div>
+      `;
+      infoPanel.querySelector('.obj-info-close').addEventListener('click', ()=>infoPanel.classList.remove('show'));
+    }
+
+    if(waypointMode){
+      buildWaypoints(world);
+    } else {
+      buildMarkers(world, (o, el)=>{
+        world.querySelectorAll('.marker.selected').forEach(m=>m.classList.remove('selected'));
+        el.classList.add('selected');
+        showInfo(o);
+      });
+    }
+
+    let rotX = 58, rotZ = -28, scale = initialScale || 0.62;
+    let dragging = false, lastX=0, lastY=0;
+    function applyTransform(){
+      world.style.transform = `translate(-50%,-50%) rotateX(${rotX}deg) rotateZ(${rotZ}deg) scale(${scale})`;
+    }
+    viewport.addEventListener('mousedown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; });
+    window.addEventListener('mouseup', ()=>dragging=false);
+    window.addEventListener('mousemove', e=>{
+      if(!dragging) return;
+      const dx = e.clientX-lastX, dy = e.clientY-lastY;
+      rotZ += dx*0.25;
+      rotX = Math.min(80, Math.max(30, rotX - dy*0.2));
+      lastX=e.clientX; lastY=e.clientY;
+      applyTransform();
+    });
+    viewport.addEventListener('wheel', e=>{
+      e.preventDefault();
+      scale = Math.min(1.3, Math.max(0.3, scale - e.deltaY*0.0006));
+      applyTransform();
+    }, {passive:false});
+
+    const controls = viewport.parentElement.querySelectorAll('.scene-btn');
+    controls.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(btn.dataset.act==='zoomin') scale = Math.min(1.3, scale+0.08);
+        if(btn.dataset.act==='zoomout') scale = Math.max(0.3, scale-0.08);
+        if(btn.dataset.act==='reset'){ rotX=58; rotZ=-28; scale = initialScale||0.62; }
+        applyTransform();
+      });
+    });
+
+    const layerPanel = viewport.parentElement.querySelector('.layer-panel');
+    if(layerPanel){
+      layerPanel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+        cb.addEventListener('change', ()=>{
+          const layer = cb.dataset.layer;
+          world.querySelectorAll(`[data-layer="${layer}"]`).forEach(n=>{
+            n.style.display = cb.checked ? '' : 'none';
+          });
+        });
+      });
+    }
+
+    applyTransform();
+    instances[containerId] = {built:true};
+  }
+
+  return {init};
+})();
+
+/* ============================================================
+   PAGE: OVERVIEW
+   ============================================================ */
+function pageOverview(){
+  return `
+  <div class="grid" style="gap:18px;">
+    <!-- Top Split: Live Video Feed & 3D Digital Twin View -->
+    <div class="cols-2" style="grid-template-columns: 1fr 1fr; gap: 16px;">
+      
+      <!-- Live Video Feed Panel -->
+      <div class="panel panel-glow hero-card" style="height: 340px; display: flex; flex-direction: column;">
+        <div class="panel-head" style="padding: 10px 14px;">
+          <span class="panel-title">LIVE DRONE VIDEO FEED</span>
+          <span class="badge badge-live"><span class="dot"></span> REC [1080P/60FPS]</span>
+        </div>
+        <div class="panel-body" style="position: relative; flex: 1; padding: 0; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+          <!-- Simulated Live Video Stream (Canvas or Video placeholder) -->
+          <div style="position: absolute; inset: 0; background: linear-gradient(135deg, #0b1410, #060a0e); display: flex; align-items: center; justify-content: center;">
+            <div style="text-align: center; color: var(--text-faint); font-family: 'IBM Plex Mono'; font-size: 12px;">
+              <div style="font-size: 24px; margin-bottom: 8px; color: var(--accent);">⊙</div>
+              LIVE MAVLINK RTMP STREAM ACTIVE<br>
+              <span style="font-size: 10px; opacity: 0.7;">LAT: 26.9124° N | LON: 75.7873° E | ALT: 118.4m</span>
+            </div>
+          </div>
+          <!-- HUD Overlays -->
+          <div class="bbox b-vehicle" style="left: 35%; top: 40%; width: 18%; height: 22%;">
+            <div class="bbox-label">VEHICLE 96.4%</div>
+          </div>
+          <div class="bbox b-person" style="left: 65%; top: 55%; width: 10%; height: 25%; border-color: var(--accent);">
+            <div class="bbox-label" style="background: var(--accent); color: #06120f;">PERSON 98.2%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3D Digital Twin View Panel -->
+      <div class="panel panel-glow hero-card" style="height: 340px; position: relative; overflow: hidden;">
+        <div class="digital-twin-status" style="top: 10px; z-index: 5;">
+          <span class="badge badge-ok"><span class="dot"></span> 3D DIGITAL TWIN — ACTIVE</span>
+        </div>
+        <div id="heroScene" style="position: absolute; inset: 0;">
+          <div class="scene-viewport" id="heroSceneViewport" style="cursor: default;">
+            <div class="scene-world" style="transform: translate(-50%,-50%) rotateX(58deg) rotateZ(-28deg) scale(0.42);">
+              <div class="scene-floor"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- KPI Metrics Grid -->
+    <div class="grid kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-top"><div class="kpi-icon">${ICONS.target}</div><span class="kpi-trend trend-up">▲ 4.2%</span></div>
+        <div class="kpi-value">2.84 km²</div><div class="kpi-label">AREA MAPPED</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top"><div class="kpi-icon">${ICONS.box}</div><span class="kpi-trend trend-up">▲ 12</span></div>
+        <div class="kpi-value">47</div><div class="kpi-label">OBJECTS DETECTED</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top"><div class="kpi-icon">${ICONS.globe}</div><span class="kpi-trend trend-up">▲ 1.8%</span></div>
+        <div class="kpi-value">94.2%</div><div class="kpi-label">3D MODEL ACCURACY</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top"><div class="kpi-icon">${ICONS.swap}</div><span class="kpi-trend trend-down">▼ 3</span></div>
+        <div class="kpi-value">8</div><div class="kpi-label">CHANGES DETECTED</div>
+      </div>
+    </div>
+
+    <!-- Recent Missions & AI Insights -->
+    <div class="cols-2">
+      <div class="panel panel-glow">
+        <div class="panel-head"><span class="panel-title">RECENT MISSIONS</span><span class="tag">3 total</span></div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:10px;">
+          ${AppData.missions.map(m=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--surface-3);border-radius:8px;border:1px solid var(--line-soft);">
+              <div>
+                <div style="font-weight:600;font-size:13px;">${m.id}</div>
+                <div style="font-size:11px;color:var(--text-faint);">${m.date} ·${m.area}</div>
+              </div>
+              <span class="badge ${m.status==='PROCESSING'?'badge-amber':'badge-ok'}">${m.status}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="insight-panel">
+        <div class="insight-head">
+          <div class="insight-icon">${ICONS.bot}</div>
+          <div class="insight-title">AeroTwin Intelligence</div>
+        </div>
+        <div class="insight-text">The latest drone survey detected 8 significant changes compared with the previous survey.</div>
+        <ul class="insight-list">
+          ${AppData.insights.map(i=>`<li>${i}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+/* ============================================================
+   PAGE: MISSION PLANNING (Autonomous Mission Planning)
+   ============================================================ */
+function pagePlanning(){
+  return `
+  <div class="cols-2">
+    <div class="panel panel-glow">
+      <div class="panel-head">
+        <span class="panel-title">ROUTE PLANNER</span>
+        <div class="mode-toggle" id="planModeToggle">
+          <button class="active" data-mode="auto">Autonomous</button>
+          <button data-mode="manual">Manual</button>
+        </div>
+      </div>
+      <div class="scene-wrap" style="height:380px;">
+        <div class="scene-viewport" id="planningScene">
+          <div class="scene-world"><div class="scene-floor"></div></div>
+        </div>
+        <div class="scene-controls">
+          <div class="scene-btn tooltip" data-tip="Zoom in" data-act="zoomin">${ICONS.plus}</div>
+          <div class="scene-btn tooltip" data-tip="Zoom out" data-act="zoomout">${ICONS.minus}</div>
+          <div class="scene-btn tooltip" data-tip="Reset view" data-act="reset">${ICONS.reset}</div>
+        </div>
+        <div class="layer-panel" style="width:150px;">
+          <div class="layer-panel-title">ROUTE INFO</div>
+          <div style="font-size:11.5px;color:var(--text-dim);line-height:1.7;">
+            6 waypoints<br>Est. duration 08:10<br>Max altitude 130 m
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="gap:18px;">
+      <div class="panel panel-glow">
+        <div class="panel-head"><span class="panel-title">MISSION TEMPLATES</span></div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:10px;">
+          ${AppData.missionTemplates.map((t,i)=>`
+            <div class="template-card ${i===1?'selected':''}" data-id="${t.id}">
+              <div class="template-name">${t.name}</div>
+              <div class="template-meta">${t.waypoints} waypoints · ${t.duration} · ${t.area}</div>
+              <div class="template-meta" style="margin-top:4px;">${t.desc}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="panel panel-glow">
+        <div class="panel-head">
+          <span class="panel-title">PRE-FLIGHT CHECKLIST</span>
+          <span class="badge badge-amber" id="checklistBadge">0 / ${AppData.preflightChecklist.length}</span>
+        </div>
+        <div class="panel-body" style="padding:8px 17px;" id="checklistBody">
+          ${AppData.preflightChecklist.map((c,i)=>`
+            <label class="checklist-item" data-i="${i}"><input type="checkbox"> ${c}</label>
+          `).join('')}
+        </div>
+        <div class="panel-body" style="padding-top:0;">
+          <button class="btn btn-primary" id="launchMissionBtn" style="width:100%;justify-content:center;">${ICONS.zap} LAUNCH AUTONOMOUS MISSION</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel panel-glow" style="margin-top:18px;">
+    <div class="panel-head"><span class="panel-title">WAYPOINT SEQUENCE</span><span class="tag">Grid Survey</span></div>
+    <div class="panel-body" style="padding:0;">
+      <table>
+        <thead><tr><th>SEQ</th><th>LATITUDE</th><th>LONGITUDE</th><th>ALTITUDE</th><th>ACTION</th></tr></thead>
+        <tbody>
+          ${AppData.waypoints.map(w=>`
+            <tr><td class="strong mono">${w.seq}</td><td class="mono">${w.lat}</td><td class="mono">${w.lon}</td><td class="mono">${w.alt} m</td><td>${w.action}</td></tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  `;
+}
+
+function bindPlanningPage(){
+  document.querySelectorAll('.template-card').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      document.querySelectorAll('.template-card').forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+  });
+  document.querySelectorAll('#planModeToggle button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#planModeToggle button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+  const checklistBody = document.getElementById('checklistBody');
+  if(checklistBody){
+    checklistBody.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+      cb.addEventListener('change', ()=>{
+        cb.closest('.checklist-item').classList.toggle('done', cb.checked);
+        const done = checklistBody.querySelectorAll('input:checked').length;
+        document.getElementById('checklistBadge').textContent = `${done} / ${AppData.preflightChecklist.length}`;
+        document.getElementById('checklistBadge').className = 'badge ' + (done===AppData.preflightChecklist.length ? 'badge-ok' : 'badge-amber');
+      });
+    });
+  }
+  const launchBtn = document.getElementById('launchMissionBtn');
+  if(launchBtn){
+    launchBtn.addEventListener('click', ()=>{
+      launchBtn.innerHTML = ICONS.check + ' MISSION QUEUED — AT-2026-002';
+      launchBtn.classList.add('btn-primary');
+      setTimeout(()=>{ launchBtn.innerHTML = ICONS.zap + ' LAUNCH AUTONOMOUS MISSION'; }, 3000);
+    });
+  }
+}
+
+/* ============================================================
+   PAGE: 3D DIGITAL TWIN
+   ============================================================ */
+function pageTwin(){
+  const layers = ['Buildings','Roads','Terrain','People','Vehicles','Equipment','Vegetation','Hazards'];
+  return `
+  <div class="panel panel-glow" style="height:calc(100vh - 165px);">
+    <div class="panel-head">
+      <span class="panel-title">3D DIGITAL TWIN — LIVE RECONSTRUCTION</span>
+      <span class="badge badge-live"><span class="dot"></span> LIVE</span>
+    </div>
+    <div class="scene-wrap" style="height:calc(100% - 49px);">
+      <div class="scene-viewport" id="twinScene">
+        <div class="scene-world"><div class="scene-floor"></div></div>
+      </div>
+      <div class="scene-controls">
+        <div class="scene-btn tooltip" data-tip="Zoom in" data-act="zoomin">${ICONS.plus}</div>
+        <div class="scene-btn tooltip" data-tip="Zoom out" data-act="zoomout">${ICONS.minus}</div>
+        <div class="scene-btn tooltip" data-tip="Reset view" data-act="reset">${ICONS.reset}</div>
+      </div>
+      <div class="layer-panel">
+        <div class="layer-panel-title">LAYERS</div>
+        ${layers.map(l=>`
+          <label class="layer-row"><input type="checkbox" checked data-layer="${l.toLowerCase()}"> ${l}</label>
+        `).join('')}
+      </div>
+      <div class="obj-info-panel"></div>
+    </div>
+  </div>
+  `;
+}
+
+/* ============================================================
+   PAGE: DRONE MISSION (with MAVSDK / MAVLink + Mission Planner)
+   ============================================================ */
+function pageMission(){
+  const m = AppData.missions[0];
+  return `
+  <div class="cols-2">
+    <div class="panel panel-glow">
+      <div class="panel-head"><span class="panel-title">FLIGHT PATH</span><span class="badge badge-amber">${m.status}</span></div>
+      <div class="panel-body">
+        <svg viewBox="0 0 500 300" style="width:100%;height:260px;">
+          <defs>
+            <pattern id="grid2" width="25" height="25" patternUnits="userSpaceOnUse">
+              <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#1b2530" stroke-width="1"/>
+            </pattern>
+          </defs>
+          <rect width="500" height="300" fill="url(#grid2)"/>
+          <path id="flightPath" d="M40,240 C120,60 220,260 300,90 S460,40 470,50" fill="none" stroke="#5fc4ae" stroke-width="2" stroke-dasharray="6 5" opacity="0.85"/>
+          <circle cx="40" cy="240" r="5" fill="#5fc4ae"/>
+          <circle cx="470" cy="50" r="5" fill="#d9695a"/>
+          <circle id="droneDot" r="6" fill="#dfe6ec" stroke="#5fc4ae" stroke-width="2"/>
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-faint);margin-top:4px;">
+          <span>● Takeoff</span><span>● Current Position</span><span>● Landing Zone</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="gap:18px;">
+      <div class="panel panel-glow">
+        <div class="panel-head"><span class="panel-title">MAVLINK LINK STATUS</span><span class="badge badge-ok"><span class="dot"></span> CONNECTED</span></div>
+        <div class="panel-body">
+          <div class="mission-stat"><span>Protocol</span><span class="mono">MAVSDK v2.6 · MAVLink v2</span></div>
+          <div class="mission-stat"><span>Vehicle Mode</span><span class="mono" id="mavMode">AUTO</span></div>
+          <div class="mission-stat"><span>Armed</span><span class="mono">YES</span></div>
+          <div class="mission-stat"><span>System / Component ID</span><span class="mono">1 / 1</span></div>
+          <div class="mission-stat"><span>Firmware</span><span class="mono">PX4 v1.14.2</span></div>
+          <div class="mission-stat"><span>Message Rate</span><span class="mono" id="mavRate">42 Hz</span></div>
+        </div>
+      </div>
+      <div class="panel panel-glow">
+        <div class="panel-head"><span class="panel-title">CURRENT MISSION</span></div>
+        <div class="panel-body">
+          <div style="font-size:19px;font-weight:600;font-family:'IBM Plex Mono';margin-bottom:2px;">${m.id}</div>
+          <div class="mission-stat"><span>Flight Duration</span><span class="mono">${m.duration}</span></div>
+          <div class="mission-stat"><span>Images Captured</span><span class="mono">${m.images.toLocaleString()}</span></div>
+          <div class="mission-stat"><span>Area Covered</span><span class="mono">${m.area}</span></div>
+          <div class="mission-stat"><span>GPS Accuracy</span><span class="mono">${m.gps}</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel panel-glow" style="margin-top:18px;">
+    <div class="panel-head"><span class="panel-title">DRONE TELEMETRY</span><span class="badge badge-ok"><span class="dot"></span> STREAMING</span></div>
+    <div class="panel-body">
+      <div class="telem-grid">
+        <div class="telem-item"><div class="telem-label">ALTITUDE</div><div class="telem-value" id="telAlt">118.4 m</div></div>
+        <div class="telem-item"><div class="telem-label">SPEED</div><div class="telem-value" id="telSpeed">12.8 m/s</div></div>
+        <div class="telem-item"><div class="telem-label">HEADING</div><div class="telem-value" id="telHeading">247°</div></div>
+        <div class="telem-item"><div class="telem-label">LATITUDE</div><div class="telem-value" id="telLat">26.9124°</div></div>
+        <div class="telem-item"><div class="telem-label">LONGITUDE</div><div class="telem-value" id="telLon">75.7873°</div></div>
+        <div class="telem-item"><div class="telem-label">BATTERY</div><div class="telem-value" id="telBattery">76%</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel panel-glow" style="margin-top:18px;">
+    <div class="panel-head"><span class="panel-title">MISSION PLANNER INTEGRATION</span></div>
+    <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;">
+      <div style="font-size:12px;color:var(--text-dim);">Sync waypoint plans directly with QGroundControl / Mission Planner over MAVLink.</div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-sm">${ICONS.download} Import Plan</button>
+        <button class="btn btn-sm btn-primary">${ICONS.send} Upload to Vehicle</button>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+function startTelemetry(){
+  const path = document.getElementById('flightPath');
+  const dot = document.getElementById('droneDot');
+  if(!path || !dot) return;
+  const len = path.getTotalLength();
+  let t = 0;
+  clearInterval(window.__telemInterval);
+  window.__telemInterval = setInterval(()=>{
+    t = (t+0.004)%1;
+    const pt = path.getPointAtLength(t*len);
+    dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
+    const alt = (110 + Math.sin(t*20)*8).toFixed(1);
+    const spd = (10 + Math.sin(t*14)*3).toFixed(1);
+    const head = Math.round((t*720)%360);
+    const bat = Math.max(40, 76 - Math.floor(t*30));
+    const lat = (26.9124 + Math.sin(t*10)*0.004).toFixed(4);
+    const lon = (75.7873 + Math.cos(t*10)*0.004).toFixed(4);
+    const rate = 38 + Math.round(Math.sin(t*30)*4);
+    const set = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+    set('telAlt', alt+' m'); set('telSpeed', spd+' m/s'); set('telHeading', head+'°');
+    set('telLat', lat+'°'); set('telLon', lon+'°'); set('telBattery', bat+'%');
+    set('mavRate', rate+' Hz');
+  }, 120);
+}
+
+/* ============================================================
+   PAGE: AI DEFECT DETECTION
+   ============================================================ */
+function pageDetection(){
+  const boxes = [
+    {l:8,t:20,w:9,h:22,type:'person',label:'PERSON 98.2%'},
+    {l:24,t:55,w:12,h:14,type:'vehicle',label:'VEHICLE 96.4%'},
+    {l:44,t:38,w:16,h:16,type:'truck',label:'TRUCK 94.8%'},
+    {l:66,t:60,w:13,h:18,type:'equipment',label:'EQUIPMENT 91.7%'},
+    {l:80,t:22,w:8,h:20,type:'person',label:'PERSON 95.1%'},
+    {l:36,t:16,w:10,h:10,type:'defect',label:'CRACK 93.4%'},
+    {l:58,t:24,w:9,h:9,type:'defect',label:'THERMAL ANOMALY 90.2%'},
+  ];
+  return `
+  <div class="cols-2">
+    <div class="panel panel-glow">
+      <div class="panel-head">
+        <span class="panel-title">DRONE FRAME — AI OBJECT &amp; DEFECT DETECTION</span>
+        <button class="btn btn-primary" id="runDetectionBtn">${ICONS.zap} RUN AI DETECTION</button>
+      </div>
+      <div class="panel-body">
+        <div class="frame-wrap" id="detectionFrame">
+          <div class="frame-noise"></div>
+          ${boxes.map(b=>`
+            <div class="bbox b-${b.type}" style="left:${b.l}%;top:${b.t}%;width:${b.w}%;height:${b.h}%;">
+              <div class="bbox-label">${b.label}</div>
+            </div>
+          `).join('')}
+          <div class="loading-overlay" id="detectionLoading">
+            <div class="spinner"></div>
+            <div>
+              <div class="loading-step" data-i="0">Processing drone frame...</div>
+              <div class="loading-step" data-i="1">Running object detection...</div>
+              <div class="loading-step" data-i="2">Scanning for structural defects...</div>
+              <div class="loading-step" data-i="3">Mapping detected objects...</div>
+              <div class="loading-step" data-i="4">Detection complete</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="gap:18px;">
+      <div class="panel panel-glow">
+        <div class="panel-head"><span class="panel-title">DETECTION SUMMARY</span></div>
+        <div class="panel-body">
+          <div class="mission-stat"><span>People</span><span class="mono">24</span></div>
+          <div class="mission-stat"><span>Vehicles</span><span class="mono">11</span></div>
+          <div class="mission-stat"><span>Equipment</span><span class="mono">5</span></div>
+          <div class="mission-stat"><span>Buildings</span><span class="mono">7</span></div>
+          <div class="mission-stat"><span>Other</span><span class="mono">3</span></div>
+          <hr class="sep">
+          <div style="display:flex;justify-content:space-between;font-weight:600;">
+            <span>Total Objects</span><span class="mono" style="color:var(--accent);">50</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel panel-glow">
+        <div class="panel-head"><span class="panel-title">DEFECT CLASSES</span><span class="tag">27 flagged</span></div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:9px;">
+          ${AppData.defectClasses.map(d=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:12.5px;color:var(--text-dim);">${d.name}</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="mono" style="font-size:12px;">${d.count}</span>
+                <span class="badge ${d.severity==='high'?'badge-red':d.severity==='medium'?'badge-amber':'badge-blue'}">${d.severity}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="panel panel-glow chart-card">
+        <div class="panel-title" style="margin-bottom:10px;">CONFIDENCE DISTRIBUTION</div>
+        <canvas id="confChart"></canvas>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+function renderDetectionChart(){
+  const ctx = document.getElementById('confChart');
+  if(!ctx || ctx.dataset.rendered) return;
+  ctx.dataset.rendered = '1';
+  const buckets = ['85-89%','90-93%','94-96%','97-99%','99-100%'];
+  const counts = [3,8,17,15,7];
+  new Chart(ctx, {
+    type:'bar',
+    data:{labels:buckets, datasets:[{data:counts, backgroundColor:'#5fc4ae', borderRadius:4, maxBarThickness:34}]},
+    options:{plugins:{legend:{display:false}}, scales:{
+      x:{ticks:{color:'#8a97a3',font:{size:10.5}}, grid:{display:false}},
+      y:{ticks:{color:'#8a97a3',font:{size:10.5}}, grid:{color:'#1b232c'}}
+    }}
+  });
+}
+
+function bindDetectionButton(){
+  const btn = document.getElementById('runDetectionBtn');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    const overlay = document.getElementById('detectionLoading');
+    overlay.classList.add('show');
+    const steps = overlay.querySelectorAll('.loading-step');
+    steps.forEach(s=>s.classList.remove('active'));
+    let i=0;
+    const iv = setInterval(()=>{
+      steps.forEach(s=>s.classList.remove('active'));
+      if(steps[i]) steps[i].classList.add('active');
+      i++;
+      if(i>steps.length){ clearInterval(iv); setTimeout(()=>overlay.classList.remove('show'), 700); }
+    }, 500);
+  });
+}
+
+/* ============================================================
+   PAGE: CHANGE DETECTION
+   ============================================================ */
+function pageChange(){
+  return `
+  <div class="panel panel-glow">
+    <div class="panel-head"><span class="panel-title">SURVEY TIMELINE</span></div>
+    <div class="panel-body">
+      <div class="timeline" id="tlTimeline">
+        ${AppData.flights.map((f,idx)=>`
+          <div class="tl-node ${idx===3?'active':''} ${idx===0?'selected-a':''} ${idx===3?'selected-b':''}" data-idx="${idx}">
+            <div class="tl-line"></div>
+            <div class="tl-dot"></div>
+            <div class="tl-label">${f.label}</div>
+            <div class="tl-date">${f.date}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="cols-2" style="margin-top:18px;">
+    <div class="panel panel-glow">
+      <div class="panel-head">
+        <span class="panel-title">BEFORE / AFTER COMPARISON</span>
+        <label class="layer-row" style="padding:0;"><input type="checkbox" id="heatmapToggle"> Change Heatmap</label>
+      </div>
+      <div class="panel-body" style="padding:10px;">
+        <div class="split-view">
+          <div class="split-pane">
+            <span class="badge badge-blue split-tag">BASELINE · 15 SEP 2026</span>
+            <div class="scene-viewport" id="changeSceneA" style="cursor:default;">
+              <div class="scene-world"><div class="scene-floor"></div></div>
+            </div>
+          </div>
+          <div class="split-pane">
+            <span class="badge badge-amber split-tag">CURRENT · 20 SEP 2026</span>
+            <div class="scene-viewport" id="changeSceneB" style="cursor:default;">
+              <div class="scene-world"><div class="scene-floor"></div></div>
+            </div>
+            <div id="heatmapOverlay" style="position:absolute;inset:0;pointer-events:none;display:none;">
+              <div style="position:absolute;left:30%;top:35%;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle, rgba(217,105,90,0.45), transparent 70%);"></div>
+              <div style="position:absolute;left:60%;top:55%;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle, rgba(217,154,78,0.4), transparent 70%);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel panel-glow">
+      <div class="panel-head"><span class="panel-title">CHANGES DETECTED</span><span class="tag">8 total</span></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:10px;">
+        ${AppData.changes.map(c=>`
+          <div class="change-card">
+            <div class="change-dot" style="background:${c.color};"></div>
+            <div><div class="change-title">${c.title}</div><div class="change-desc">${c.desc}</div></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+function bindChangePage(){
+  const toggle = document.getElementById('heatmapToggle');
+  if(toggle){
+    toggle.addEventListener('change', ()=>{
+      document.getElementById('heatmapOverlay').style.display = toggle.checked ? 'block' : 'none';
+    });
+  }
+  document.querySelectorAll('#tlTimeline .tl-node').forEach(n=>{
+    n.addEventListener('click', ()=>{
+      document.querySelectorAll('#tlTimeline .tl-node').forEach(x=>x.classList.remove('active'));
+      n.classList.add('active');
+    });
+  });
+}
+
+/* ============================================================
+   PAGE: PREDICTIVE MAINTENANCE
+   ============================================================ */
+function healthColor(h){ return h>=75 ? 'var(--accent)' : h>=50 ? 'var(--amber)' : 'var(--red)'; }
+function pageMaintenance(){
+  return `
+  <div class="cols-2">
+    <div class="panel panel-glow">
+      <div class="panel-head"><span class="panel-title">ASSET HEALTH</span><span class="tag">${AppData.assets.length} assets tracked</span></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:10px;">
+        ${AppData.assets.map(a=>`
+          <div class="asset-row">
+            <div style="flex:1;">
+              <div class="asset-name">${a.name}</div>
+              <div class="asset-meta">${a.category} · Last inspected ${a.lastInspected} · ${a.action}</div>
+              <div class="health-track" style="margin-top:7px;"><div class="health-fill" style="width:${a.health}%;background:${healthColor(a.health)};"></div></div>
+            </div>
+            <div style="text-align:right;">
+              <div class="asset-score" style="color:${healthColor(a.health)};">${a.health}%</div>
+              <div class="asset-meta">${a.trend==='declining'?'▼ declining':'● stable'}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="grid" style="gap:18px;">
+      <div class="panel panel-glow chart-card">
+        <div class="panel-title" style="margin-bottom:10px;">HEALTH TREND — LAST 4 SURVEYS</div>
+        <canvas id="healthTrendChart"></canvas>
+      </div>
+      <div class="panel panel-glow">
+        <div class="panel-head"><span class="panel-title">PREDICTED MAINTENANCE WINDOW</span></div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:8px;">
+          ${AppData.assets.slice().sort((a,b)=>a.health-b.health).map(a=>`
+            <div class="mission-stat"><span>${a.name}</span><span class="mono" style="color:${healthColor(a.health)};">${a.window}</span></div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+  `;
+}
+function renderMaintenanceChart(){
+  const ctx = document.getElementById('healthTrendChart');
+  if(!ctx || ctx.dataset.rendered) return;
+  ctx.dataset.rendered='1';
+  new Chart(ctx, {type:'line', data:{
+    labels:['Flight 01','Flight 02','Flight 03','Current'],
+    datasets: AppData.assets.slice(0,3).map((a,i)=>{
+      const base = a.health + 18;
+      const colors = ['#5fc4ae','#d99a4e','#d9695a'];
+      return {label:a.name.split(' — ')[0].split(' ')[0]+(a.name.includes('#')?' '+a.name.split('#')[1]:''), data:[base, base-4, base-9, a.health], borderColor:colors[i], backgroundColor:'transparent', tension:0.3};
+    })
+  }, options:{plugins:{legend:{labels:{color:'#8a97a3', font:{size:10}}}}, scales:{x:{ticks:{color:'#8a97a3',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#8a97a3',font:{size:10}},grid:{color:'#1b232c'}}}}});
+}
+
+/* ============================================================
+   PAGE: GEOSPATIAL INTELLIGENCE
+   ============================================================ */
+function pageGeo(){
+  return `
+  <div class="cols-2">
+    <div class="panel panel-glow" style="grid-column:1/-1;">
+      <div class="panel-head">
+        <span class="panel-title">OBJECT REGISTRY</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="tag">${AppData.objects.length} objects</span>
+          <input type="search" id="geoSearch" placeholder="Search by ID or type..." style="width:220px;">
+        </div>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <div style="max-height:420px;overflow:auto;">
+          <table>
+            <thead><tr><th>ID</th><th>TYPE</th><th>LATITUDE</th><th>LONGITUDE</th><th>CONFIDENCE</th><th>STATUS</th></tr></thead>
+            <tbody id="geoTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel panel-glow" style="margin-top:18px;">
+    <div class="panel-head"><span class="panel-title">SELECTED OBJECT — MAP CONTEXT</span></div>
+    <div class="panel-body" id="geoMiniMapWrap">
+      <div class="empty-state">${ICONS.pin}<div>Select an object from the table to view its position</div></div>
+    </div>
+  </div>
+  `;
+}
+
+function renderGeoTable(filter){
+  const tbody = document.getElementById('geoTableBody');
+  if(!tbody) return;
+  const f = (filter||'').toLowerCase();
+  const rows = AppData.objects.filter(o=> !f || o.id.toLowerCase().includes(f) || o.type.toLowerCase().includes(f));
+  tbody.innerHTML = rows.map(o=>`
+    <tr data-num="${o.num}">
+      <td class="strong mono">#${String(o.num).padStart(3,'0')}</td>
+      <td>${o.icon} ${o.type}</td>
+      <td class="mono">${o.lat}</td>
+      <td class="mono">${o.lon}</td>
+      <td class="mono">${o.confidence}%</td>
+      <td><span class="badge ${o.status==='Moving'?'badge-amber':o.status==='Static'?'badge-violet':'badge-blue'}">${o.status}</span></td>
+    </tr>
+  `).join('');
+  tbody.querySelectorAll('tr').forEach(tr=>{
+    tr.addEventListener('click', ()=>{
+      tbody.querySelectorAll('tr').forEach(x=>x.classList.remove('selected'));
+      tr.classList.add('selected');
+      const o = AppData.objects.find(x=>x.num==tr.dataset.num);
+      showGeoMiniMap(o);
+    });
+  });
+}
+
+function showGeoMiniMap(o){
+  const wrap = document.getElementById('geoMiniMapWrap');
+  wrap.innerHTML = `
+    <div style="display:flex;gap:20px;align-items:center;">
+      <div style="position:relative;width:220px;height:150px;flex:none;border-radius:8px;overflow:hidden;background:radial-gradient(ellipse at 50% 30%, #10222a, #060a0e 75%);border:1px solid var(--line-soft);">
+        <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(95,196,174,0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(95,196,174,0.09) 1px, transparent 1px);background-size:18px 18px;"></div>
+        <div style="position:absolute;left:${(o.x/1000*100).toFixed(1)}%;top:${(o.y/700*100).toFixed(1)}%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;box-shadow:0 0 0 6px rgba(95,196,174,0.15);" class="marker ${o.cls}">${o.icon}</div>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px;">Object #${String(o.num).padStart(3,'0')} — ${o.type}</div>
+        <div class="mission-stat"><span>Latitude</span><span class="mono">${o.lat}</span></div>
+        <div class="mission-stat"><span>Longitude</span><span class="mono">${o.lon}</span></div>
+        <div class="mission-stat"><span>Altitude</span><span class="mono">${o.alt} m</span></div>
+        <div class="mission-stat"><span>Confidence</span><span class="mono">${o.confidence}%</span></div>
+        <div class="mission-stat"><span>Status</span><span class="mono">${o.status}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function bindGeoPage(){
+  renderGeoTable('');
+  const search = document.getElementById('geoSearch');
+  if(search) search.addEventListener('input', ()=>renderGeoTable(search.value));
+}
+
+/* ============================================================
+   PAGE: EXECUTIVE DASHBOARD
+   ============================================================ */
+function pageExecutive(){
+  return `
+  <div class="grid kpi-grid">
+    <div class="kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.drone}</div><span class="kpi-trend trend-up">▲ 8%</span></div><div class="kpi-value">91%</div><div class="kpi-label">FLEET UTILIZATION</div></div>
+    <div class="kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.check}</div><span class="kpi-trend trend-up">▲ 3</span></div><div class="kpi-value">14</div><div class="kpi-label">MISSIONS THIS MONTH</div></div>
+    <div class="kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.target}</div><span class="kpi-trend trend-up">▲ 5.1%</span></div><div class="kpi-value">31.4 km²</div><div class="kpi-label">TOTAL AREA SURVEYED</div></div>
+    <div class="kpi-card"><div class="kpi-top"><div class="kpi-icon">${ICONS.trend}</div><span class="kpi-trend trend-up">▲ 12%</span></div><div class="kpi-value">₹18.6L</div><div class="kpi-label">EST. COST SAVINGS (MTD)</div></div>
+  </div>
+
+  <div class="cols-2" style="margin-top:18px;">
+    <div class="panel panel-glow chart-card">
+      <div class="panel-title" style="margin-bottom:10px;">MISSIONS COMPLETED — LAST 6 MONTHS</div>
+      <canvas id="execMissionsChart"></canvas>
+    </div>
+    <div class="panel panel-glow">
+      <div class="panel-head"><span class="panel-title">ASSET HEALTH INDEX</span></div>
+      <div class="panel-body">
+        <div style="font-size:26px;font-weight:600;font-family:'IBM Plex Mono';">67%</div>
+        <div style="font-size:11.5px;color:var(--text-faint);margin-bottom:4px;">fleet-wide average across ${AppData.assets.length} tracked assets</div>
+        <div class="progress-track"><div class="progress-fill" style="width:67%;background:linear-gradient(90deg,var(--amber-dim),var(--amber));"></div></div>
+        <hr class="sep">
+        <div class="mission-stat"><span>Assets in critical range (&lt;50%)</span><span class="mono" style="color:var(--red);">1</span></div>
+        <div class="mission-stat"><span>Assets declining</span><span class="mono" style="color:var(--amber);">3</span></div>
+        <div class="mission-stat"><span>Open alerts</span><span class="mono">${AppData.alerts.length}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel panel-glow" style="margin-top:18px;">
+    <div class="panel-head"><span class="panel-title">EXECUTIVE SUMMARY</span></div>
+    <div class="panel-body">
+      <div class="insight-text" style="margin-bottom:0;">
+        Fleet utilization is up 8% month-over-month with 14 missions completed. Reconstruction accuracy holds at 94.2% average.
+        One asset — the substation transformer — requires priority attention within 1–2 weeks. Overall change activity across
+        surveyed sites remains within expected construction-phase ranges.
+      </div>
+    </div>
+  </div>
+  `;
+}
+function renderExecutiveCharts(){
+  const ctx = document.getElementById('execMissionsChart');
+  if(!ctx || ctx.dataset.rendered) return;
+  ctx.dataset.rendered='1';
+  new Chart(ctx, {type:'bar', data:{
+    labels:['Apr','May','Jun','Jul','Aug','Sep'],
+    datasets:[{data:[7,9,8,11,12,14], backgroundColor:'#5fc4ae', borderRadius:4}]
+  }, options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#8a97a3',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#8a97a3',font:{size:10}},grid:{color:'#1b232c'}}}}});
+}
+
+/* ============================================================
+   PAGE: REPORTS & ANALYTICS
+   ============================================================ */
+function pageAnalytics(){
+  return `
+  <div class="panel panel-glow" style="margin-bottom:18px;">
+    <div class="panel-head">
+      <span class="panel-title">REPORT GENERATOR</span>
+      <button class="btn btn-primary" id="genReportBtn">${ICONS.file} GENERATE REPORT</button>
+    </div>
+    <div class="panel-body" id="reportPreview" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--surface-3);border-radius:8px;border:1px solid var(--line-soft);">
+        <div>
+          <div style="font-weight:600;font-size:13px;">Survey Summary Report — AT-2026-001</div>
+          <div style="font-size:11px;color:var(--text-faint);" id="reportTimestamp">Generated just now</div>
+        </div>
+        <button class="btn btn-sm">${ICONS.download} Download PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols-3">
+    <div class="panel panel-glow chart-card">
+      <div class="panel-title" style="margin-bottom:10px;">OBJECT DISTRIBUTION</div>
+      <canvas id="chartDist"></canvas>
+    </div>
+    <div class="panel panel-glow chart-card">
+      <div class="panel-title" style="margin-bottom:10px;">DETECTION CONFIDENCE</div>
+      <canvas id="chartConf"></canvas>
+    </div>
+    <div class="panel panel-glow chart-card">
+      <div class="panel-title" style="margin-bottom:10px;">CHANGE HISTORY</div>
+      <canvas id="chartHistory"></canvas>
+    </div>
+  </div>
+  <div class="cols-2" style="margin-top:18px;">
+    <div class="panel panel-glow chart-card">
+      <div class="panel-title" style="margin-bottom:10px;">OBJECT MOVEMENT OVER TIME</div>
+      <canvas id="chartMovement"></canvas>
+    </div>
+    <div class="panel panel-glow">
+      <div class="panel-title" style="margin-bottom:12px;">AREA COVERAGE</div>
+      <div style="font-size:26px;font-weight:600;font-family:'IBM Plex Mono';">94.2%</div>
+      <div style="font-size:11.5px;color:var(--text-faint);margin-bottom:4px;">of surveyed area successfully reconstructed</div>
+      <div class="progress-track"><div class="progress-fill" style="width:94.2%;"></div></div>
+      <hr class="sep">
+      <div class="mission-stat"><span>Terrain</span><span class="mono">98.1%</span></div>
+      <div class="mission-stat"><span>Buildings</span><span class="mono">95.4%</span></div>
+      <div class="mission-stat"><span>Vegetation</span><span class="mono">88.7%</span></div>
+    </div>
+  </div>
+  `;
+}
+
+function bindAnalyticsPage(){
+  const btn = document.getElementById('genReportBtn');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    const preview = document.getElementById('reportPreview');
+    preview.style.display = 'block';
+    document.getElementById('reportTimestamp').textContent = 'Generated at ' + new Date().toTimeString().slice(0,8);
+  });
+}
+
+function renderAnalyticsCharts(){
+  const distCtx = document.getElementById('chartDist');
+  if(distCtx && !distCtx.dataset.rendered){
+    distCtx.dataset.rendered='1';
+    new Chart(distCtx, {type:'doughnut', data:{
+      labels:['People','Vehicles','Equipment','Buildings','Other'],
+      datasets:[{data:[24,11,5,7,3], backgroundColor:['#5fc4ae','#5b8fc9','#d9695a','#9b8fd6','#d99a4e'], borderColor:'#121820', borderWidth:2}]
+    }, options:{plugins:{legend:{position:'bottom', labels:{color:'#8a97a3', boxWidth:10, font:{size:10.5}}}}}});
+  }
+  const confCtx = document.getElementById('chartConf');
+  if(confCtx && !confCtx.dataset.rendered){
+    confCtx.dataset.rendered='1';
+    new Chart(confCtx, {type:'bar', data:{
+      labels:['85-89','90-93','94-96','97-99','99-100'],
+      datasets:[{data:[3,8,17,15,7], backgroundColor:'#5fc4ae', borderRadius:4}]
+    }, options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#8a97a3',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#8a97a3',font:{size:10}},grid:{color:'#1b232c'}}}}});
+  }
+  const histCtx = document.getElementById('chartHistory');
+  if(histCtx && !histCtx.dataset.rendered){
+    histCtx.dataset.rendered='1';
+    new Chart(histCtx, {type:'bar', data:{
+      labels:AppData.flights.map(f=>f.label),
+      datasets:[{data:AppData.flights.map(f=>f.changes), backgroundColor:'#d99a4e', borderRadius:4}]
+    }, options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#8a97a3',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#8a97a3',font:{size:10}},grid:{color:'#1b232c'}}}}});
+  }
+  const moveCtx = document.getElementById('chartMovement');
+  if(moveCtx && !moveCtx.dataset.rendered){
+    moveCtx.dataset.rendered='1';
+    new Chart(moveCtx, {type:'line', data:{
+      labels:['14:00','14:08','14:16','14:24','14:32'],
+      datasets:[
+        {label:'People', data:[12,15,18,20,21], borderColor:'#5fc4ae', backgroundColor:'transparent', tension:0.35},
+        {label:'Vehicles', data:[6,7,8,9,11], borderColor:'#5b8fc9', backgroundColor:'transparent', tension:0.35}
+      ]
+    }, options:{plugins:{legend:{labels:{color:'#8a97a3', font:{size:10.5}}}}, scales:{x:{ticks:{color:'#8a97a3',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#8a97a3',font:{size:10}},grid:{color:'#1b232c'}}}}});
+  }
+}
+
+/* ============================================================
+   PAGE: ALERTS
+   ============================================================ */
+const ALERT_ICON = {critical:'alert', warning:'alert', info:'bell'};
+function pageAlerts(){
+  return `
+  <div class="panel panel-glow">
+    <div class="panel-head">
+      <span class="panel-title">REAL-TIME ALERTS</span>
+      <div class="filter-tabs" id="alertFilters">
+        <span class="filter-tab active" data-f="all">All</span>
+        <span class="filter-tab" data-f="critical">Critical</span>
+        <span class="filter-tab" data-f="warning">Warning</span>
+        <span class="filter-tab" data-f="info">Info</span>
+      </div>
+    </div>
+    <div class="panel-body" style="display:flex;flex-direction:column;gap:10px;" id="alertsList"></div>
+  </div>
+  `;
+}
+function renderAlertsList(filter){
+  const list = document.getElementById('alertsList');
+  if(!list) return;
+  const rows = AppData.alerts.filter(a=> filter==='all' || a.sev===filter);
+  list.innerHTML = rows.length ? rows.map(a=>`
+    <div class="alert-row">
+      <div class="alert-icon" style="background:rgba(${a.sev==='critical'?'217,105,90':a.sev==='warning'?'217,154,78':'91,143,201'},0.12);color:${SEV_COLOR[a.sev]};">${ICONS[ALERT_ICON[a.sev]]}</div>
+      <div style="flex:1;">
+        <div class="alert-title">${a.title}</div>
+        <div class="alert-desc">${a.desc}</div>
+      </div>
+      <div class="alert-time">${a.time}</div>
+    </div>
+  `).join('') : `<div class="empty-state">${ICONS.bell}<div>No alerts in this category</div></div>`;
+}
+function bindAlertsPage(){
+  renderAlertsList('all');
+  document.querySelectorAll('#alertFilters .filter-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('#alertFilters .filter-tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      renderAlertsList(tab.dataset.f);
+    });
+  });
+}
+
+/* ============================================================
+   PAGE: TEAM COLLABORATION
+   ============================================================ */
+function pageTeam(){
+  return `
+  <div class="cols-2">
+    <div class="panel panel-glow">
+      <div class="panel-head"><span class="panel-title">TEAM MEMBERS</span><span class="tag">${AppData.team.length} online team</span></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:9px;">
+        ${AppData.team.map(t=>`
+          <div class="team-card">
+            <div class="avatar ${t.status==='away'?'away':''}">${t.initials}<span class="presence-dot ${t.status}"></span></div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;">${t.name}</div>
+              <div style="font-size:11px;color:var(--text-faint);">${t.role}</div>
+            </div>
+            <span class="badge ${t.status==='online'?'badge-ok':t.status==='away'?'badge-amber':'badge-blue'}">${t.status}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="panel panel-glow">
+      <div class="panel-head"><span class="panel-title">ACTIVITY FEED</span></div>
+      <div class="panel-body" style="padding-bottom:8px;" id="activityFeed">
+        ${AppData.activity.map(a=>`
+          <div class="activity-item">
+            <div class="avatar" style="width:28px;height:28px;font-size:10px;">${a.who.split(' ').map(w=>w[0]).join('')}</div>
+            <div><div class="activity-text"><b>${a.who}</b> ${a.text}</div><div class="activity-time">${a.time}</div></div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="panel-body" style="padding-top:0;display:flex;gap:8px;">
+        <input type="text" id="commentInput" placeholder="Add a comment or note..." style="flex:1;">
+        <button class="btn btn-primary btn-sm" id="commentSendBtn">${ICONS.send}</button>
+      </div>
+    </div>
+  </div>
+  `;
+}
+function bindTeamPage(){
+  const btn = document.getElementById('commentSendBtn');
+  const input = document.getElementById('commentInput');
+  if(!btn) return;
+  function send(){
+    const val = input.value.trim();
+    if(!val) return;
+    AppData.activity.unshift({who:'You', text:`commented: "${val}"`, time:'just now'});
+    input.value='';
+    const feed = document.getElementById('activityFeed');
+    feed.innerHTML = AppData.activity.map(a=>`
+      <div class="activity-item">
+        <div class="avatar" style="width:28px;height:28px;font-size:10px;">${a.who.split(' ').map(w=>w[0]).join('')}</div>
+        <div><div class="activity-text"><b>${a.who}</b> ${a.text}</div><div class="activity-time">${a.time}</div></div>
+      </div>
+    `).join('');
+  }
+  btn.addEventListener('click', send);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') send(); });
+}
+
+/* ============================================================
+   PAGE: SETTINGS
+   ============================================================ */
+function pageSettings(){
+  return `
+  <div class="cols-2">
+    <div class="panel panel-glow">
+      <div class="panel-head"><span class="panel-title">DATA SOURCE</span></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:12px;">
+        <div class="mission-stat"><span>Mode</span><span class="badge badge-amber">MOCK DATA (PROTOTYPE)</span></div>
+        <div class="mission-stat"><span>Backend endpoint</span><span class="mono" style="color:var(--text-faint);">not connected</span></div>
+        <div class="mission-stat"><span>Drone telemetry link</span><span class="mono" style="color:var(--text-faint);">MAVSDK / MAVLink (planned)</span></div>
+        <div class="mission-stat"><span>AI model</span><span class="mono" style="color:var(--text-faint);">YOLO (planned)</span></div>
+        <div class="mission-stat"><span>3D reconstruction engine</span><span class="mono" style="color:var(--text-faint);">planned</span></div>
+        <hr class="sep">
+        <div style="font-size:11.5px;color:var(--text-faint);line-height:1.6;">
+          This prototype renders realistic mock telemetry, detections and change events so the interface, interactions and data contracts
+          can be validated before real drone footage, AI inference and geospatial services are wired in.
+        </div>
+      </div>
+    </div>
+    <div class="panel panel-glow">
+      <div class="panel-head"><span class="panel-title">PROCESSING PIPELINE</span></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:9px;">
+        ${['Drone Video','Video / Image Processing','3D Reconstruction','AI Object & Defect Detection','Object Tracking','Geo-Localization','Change Detection','Predictive Maintenance Scoring','Digital Twin','Cesium-style Visualization'].map((s,i)=>`
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="tag mono">${String(i+1).padStart(2,'0')}</span>
+            <span style="font-size:12.5px;color:var(--text-dim);">${s}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+/* ============================================================
+   MOUNT
+   ============================================================ */
+function mount(){
+  renderNav();
+  renderBell();
+  const content = document.getElementById('content');
+  const pages = [
+    {id:'overview', html:pageOverview},
+    {id:'planning', html:pagePlanning},
+    {id:'twin', html:pageTwin},
+    {id:'mission', html:pageMission},
+    {id:'detection', html:pageDetection},
+    {id:'change', html:pageChange},
+    {id:'maintenance', html:pageMaintenance},
+    {id:'geo', html:pageGeo},
+    {id:'executive', html:pageExecutive},
+    {id:'analytics', html:pageAnalytics},
+    {id:'alerts', html:pageAlerts},
+    {id:'team', html:pageTeam},
+    {id:'settings', html:pageSettings}
+  ];
+  content.innerHTML = pages.map(p=>`<div class="page" id="page-${p.id}">${p.html()}</div>`).join('')
+    + `<footer class="tagline">From Drone Data to an <b>Intelligent 3D Digital Twin</b>.</footer>`;
+
+  goTo('overview');
+  tickClock();
+  startTelemetry();
+  bindDetectionButton();
+  bindChangePage();
+  bindGeoPage();
+  bindPlanningPage();
+  bindAnalyticsPage();
+  bindAlertsPage();
+  bindTeamPage();
+  simulateLiveAlert();
+}
+document.addEventListener('DOMContentLoaded', mount);
+</script>
+</body>
+</html>
